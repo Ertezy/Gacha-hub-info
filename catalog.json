@@ -1,0 +1,30 @@
+[
+  {
+    "id": "genshin",
+    "title": "Genshin Impact",
+    "redeemUrl": "https://genshin.hoyoverse.com/en/gift?code={code}",
+    "match": { "steamAppIds": [], "epicAppNames": [], "folderNames": ["Genshin Impact"] }
+  },
+  {
+    "id": "hsr",
+    "title": "Honkai: Star Rail",
+    "redeemUrl": "https://hsr.hoyoverse.com/gift?code={code}",
+    "match": { "steamAppIds": [], "epicAppNames": [], "folderNames": ["Honkai: Star Rail", "Honkai Star Rail"] }
+  },
+  {
+    "id": "zzz",
+    "title": "Zenless Zone Zero",
+    "redeemUrl": "https://zenless.hoyoverse.com/redemption?code={code}",
+    "match": { "steamAppIds": [], "epicAppNames": [], "folderNames": ["Zenless Zone Zero"] }
+  },
+  {
+    "id": "wuthering",
+    "title": "Wuthering Waves",
+    "match": { "steamAppIds": [3513350], "epicAppNames": [], "folderNames": ["Wuthering Waves"] }
+  },
+  {
+    "id": "endfield",
+    "title": "Arknights: Endfield",
+    "match": { "steamAppIds": [], "epicAppNames": [], "folderNames": ["Arknights: Endfield", "Arknights Endfield"] }
+  }
+]
