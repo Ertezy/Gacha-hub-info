@@ -70,6 +70,19 @@ test("Star Rail: срок датой — до конца дня UTC; плохо�
   assert.equal(r.dropped, 2);
 });
 
+test("Star Rail: истёкшая строка (exp) и кросс-промо ссылка в ячейке кода пропускаются, не считаются", () => {
+  const EXPIRED = `{{Redemption Code Row|OLDCODE123|ref=|A|{{Item List|Credit*1|mode=br}}|2020-01-01|exp}}`;
+  const LINK = `{{Redemption Code Row|[[Honkai: Star Rail × LiHO TEA]]|A|{{Item List|Credit*1|mode=br}}|2026-08-01|2026-08-02}}`;
+  const rExpired = parseRowCodes(EXPIRED, "Redemption Code Row", "hsr", "https://x");
+  assert.equal(rExpired.codes.length, 0);
+  assert.equal(rExpired.parsed, 0);
+  assert.equal(rExpired.dropped, 0);
+  const rLink = parseRowCodes(LINK, "Redemption Code Row", "hsr", "https://x");
+  assert.equal(rLink.codes.length, 0);
+  assert.equal(rLink.parsed, 0);
+  assert.equal(rLink.dropped, 0);
+});
+
 test("страница без раздела кодов — not found", () => {
   const r = parseRowCodes("==Something else==", "Redemption Code Row", "zzz", "https://x");
   assert.equal(r.found, false);
@@ -104,4 +117,15 @@ test("ennead.cc: активные коды без срока", () => {
 test("ennead.cc: чужая форма ответа — not found", () => {
   assert.equal(parseEnneadCodes({ message: "unknown game" }, "hsr").found, false);
   assert.equal(parseEnneadCodes(null, "hsr").found, false);
+});
+
+test("ennead.cc: испорченная запись (не объект) не роняет разбор", () => {
+  const r = parseEnneadCodes(
+    { active: [null, { code: "2BJ64QRZ7RT8", rewards: [] }] },
+    "genshin",
+  );
+  assert.equal(r.found, true);
+  assert.equal(r.codes.length, 1);
+  assert.equal(r.codes[0]!.code, "2BJ64QRZ7RT8");
+  assert.equal(r.dropped, 1);
 });

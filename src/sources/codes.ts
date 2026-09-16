@@ -40,7 +40,20 @@ export function parseRowCodes(
   for (const row of rows) {
     const { positional, named } = templateParams(row);
     const [cell = "", server = "", rewards = "", , expiry = ""] = positional;
-    if (server.trim().toUpperCase() === "CN" || named.get("notacode")?.toLowerCase() === "yes") continue;
+    const expiryNorm = expiry.trim().toLowerCase();
+    // CN-сервер, отмеченные не-коды, уже истёкшие строки (`exp`/`expired`) и старые
+    // кросс-промо в ячейке кода (ссылка вида `[[...]]`/`[https://...]`) — не коды:
+    // пропускаются целиком, как CN, а не считаются разобранными и выброшенными,
+    // иначе доля «выброшенного» росла бы на совершенно здоровой странице.
+    if (
+      server.trim().toUpperCase() === "CN" ||
+      named.get("notacode")?.toLowerCase() === "yes" ||
+      expiryNorm === "exp" ||
+      expiryNorm === "expired" ||
+      cell.trim().startsWith("[")
+    ) {
+      continue;
+    }
     parsed++;
     const expiresAt = hoyoExpiry(expiry);
     const group = cell.split(";").map((code) => code.trim());
@@ -94,9 +107,15 @@ export function parseEnneadCodes(json: unknown, gameId: GameId): ParsedCodes {
   if (!Array.isArray(active)) return { found: false, codes: [], parsed: 0, dropped: 0 };
   const codes: Code[] = [];
   let dropped = 0;
-  for (const entry of active as { code?: unknown; rewards?: unknown }[]) {
-    const code = typeof entry.code === "string" ? entry.code.trim() : "";
-    const rewards = Array.isArray(entry.rewards) ? entry.rewards.filter((r) => typeof r === "string") : [];
+  for (const entry of active) {
+    // Испорченная запись (не объект) — не код, но не повод падать: просто выброшена.
+    if (typeof entry !== "object" || entry === null) {
+      dropped++;
+      continue;
+    }
+    const item = entry as { code?: unknown; rewards?: unknown };
+    const code = typeof item.code === "string" ? item.code.trim() : "";
+    const rewards = Array.isArray(item.rewards) ? item.rewards.filter((r) => typeof r === "string") : [];
     if (!CODE_PATTERN.test(code)) {
       dropped++;
       continue;
