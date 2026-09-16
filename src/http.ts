@@ -61,7 +61,7 @@ export function createHttp(options: HttpOptions = {}): Http {
     if (res.status === 304) return { status: 304, body: "", validators: validators };
     if (res.status !== 200) throw new StatusError(res.status, url);
     const body = await res.text();
-    if (body.length > maxBytes) throw new Error(`ответ превысил потолок ${maxBytes} байт: ${url}`);
+    if (body.length > maxBytes) throw new TooLargeError(maxBytes, url);
     return { status: 200, body, validators: fresh };
   }
 
@@ -69,8 +69,11 @@ export function createHttp(options: HttpOptions = {}): Http {
     try {
       return await attempt(url, validators);
     } catch (error) {
-      // Повторяем только код ответа из RETRYABLE; прочие ошибки (сеть, потолок размера) — сразу наружу.
-      if (!(error instanceof StatusError) || !RETRYABLE.has(error.status)) throw error;
+      // Не повторяем только превышение потолка размера и коды ответа не из RETRYABLE
+      // (например, 404) — это не временные сбои. Сеть, таймаут и повторяемые коды
+      // получают один повтор после паузы.
+      if (error instanceof TooLargeError) throw error;
+      if (error instanceof StatusError && !RETRYABLE.has(error.status)) throw error;
       await sleep(retryDelayMs);
       return attempt(url, validators);
     }
@@ -101,5 +104,11 @@ class StatusError extends Error {
   constructor(status: number, url: string) {
     super(`ответ ${status}: ${url}`);
     this.status = status;
+  }
+}
+
+class TooLargeError extends Error {
+  constructor(maxBytes: number, url: string) {
+    super(`ответ превысил потолок ${maxBytes} байт: ${url}`);
   }
 }

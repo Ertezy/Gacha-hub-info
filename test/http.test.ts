@@ -61,9 +61,22 @@ test("не https — отказ без запроса", async () => {
   assert.equal(f.calls.length, 0);
 });
 
-test("ответ больше потолка — ошибка", async () => {
+test("ответ больше потолка — ошибка, без повтора", async () => {
   const f = fakeFetch([{ status: 200, body: "x".repeat(11) }]);
   await assert.rejects(createHttp({ fetch: f.fetch, sleep: noSleep, maxBytes: 10 }).get("https://example.org/a"), /потолок/);
+  assert.equal(f.calls.length, 1);
+});
+
+test("сетевая ошибка повторяется один раз", async () => {
+  let calls = 0;
+  const fetch: FetchLike = async () => {
+    calls++;
+    if (calls === 1) throw new Error("ECONNRESET");
+    return { status: 200, text: async () => "ok", headers: { get: () => null } };
+  };
+  const res = await createHttp({ fetch, sleep: noSleep }).get("https://example.org/a");
+  assert.equal(res.body, "ok");
+  assert.equal(calls, 2);
 });
 
 test("к одному хосту запросы идут по одному", async () => {
