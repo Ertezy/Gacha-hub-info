@@ -84,3 +84,21 @@ test("баннер: новый добавляется, известный ист
   assert.ok(hidden.ok);
   if (hidden.ok) assert.deepEqual(applyOverrides(hub, hidden.overrides, NOW).banners, []);
 });
+
+test("null и неправильный тип в записях — ошибка, не throw", () => {
+  const r = parseOverrides({ codes: [null], banners: [null], hide: [null] });
+  assert.equal(r.ok, false);
+  if (r.ok) return;
+  assert.equal(r.errors.length, 3);
+  assert.match(r.errors[0]!, /^codes\[0\]/);
+  assert.match(r.errors[1]!, /^banners\[0\]/);
+  assert.match(r.errors[2]!, /^hide\[0\]/);
+});
+
+test("верхний уровень: неправильный тип поля", () => {
+  const r = parseOverrides({ codes: {} });
+  assert.equal(r.ok, false);
+  if (r.ok) return;
+  assert.equal(r.errors.length, 1);
+  assert.match(r.errors[0]!, /^codes:/);
+});
