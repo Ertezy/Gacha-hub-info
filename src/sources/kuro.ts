@@ -24,6 +24,7 @@ export function conveneAnnouncements(json: unknown, now: number): { found: boole
   if (!Array.isArray(json)) return { found: false, announcements: [] };
   const announcements: Announcement[] = [];
   for (const article of json as { articleId?: unknown; articleTitle?: unknown; startTime?: unknown }[]) {
+    if (typeof article !== "object" || article === null) continue;
     if (typeof article.articleId !== "number" || typeof article.articleTitle !== "string" || typeof article.startTime !== "string") continue;
     if (!/convene/i.test(article.articleTitle) || /^\s*convene details\s*$/i.test(article.articleTitle)) continue;
     const parts = parseIsoLike(article.startTime);

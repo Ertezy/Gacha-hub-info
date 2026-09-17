@@ -35,3 +35,13 @@ test("сигнал, пока фандом не знает цикла; пропа
   assert.equal(unknownToWiki([], [augustStart]), null);
   assert.equal(unknownToWiki(announcements, [])?.articleId, 5431);
 });
+
+test("список с null и другим мусором не роняет разбор", () => {
+  const r = conveneAnnouncements(
+    [null, 42, "x", { articleId: 5431, articleTitle: "[Version 3.6 Featured Resonator/Weapon Convene: Phase II]", startTime: "2026-09-09 11:15:00" }],
+    NOW
+  );
+  assert.equal(r.found, true);
+  assert.equal(r.announcements.length, 1);
+  assert.equal(r.announcements[0]?.articleId, 5431);
+});
