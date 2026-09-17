@@ -51,8 +51,12 @@ export function parseOverrides(json: unknown): { ok: true; overrides: Overrides 
   const errors: string[] = [];
   const overrides: Overrides = { codes: [], banners: [], hide: [] };
 
+  if (root.codes !== undefined && !Array.isArray(root.codes)) {
+    errors.push("codes: должно быть списком");
+  }
   entries(root.codes).forEach((e, i) => {
     const at = `codes[${i}]`;
+    if (typeof e !== "object" || e === null || Array.isArray(e)) return void errors.push(`${at}: запись должна быть объектом`);
     if (!isGame(e.game)) return void errors.push(`${at}: неизвестная игра ${JSON.stringify(e.game)}`);
     if (typeof e.code !== "string" || !CODE_PATTERN.test(e.code)) return void errors.push(`${at}: код только из латинских букв и цифр, 4–40 знаков`);
     if (e.rewards !== undefined && (typeof e.rewards !== "string" || e.rewards.length > 300)) return void errors.push(`${at}: награда — строка до 300 знаков`);
@@ -62,8 +66,12 @@ export function parseOverrides(json: unknown): { ok: true; overrides: Overrides 
     overrides.codes.push({ game: e.game, code: e.code, rewards: e.rewards as string | undefined, expires: e.expires as string | undefined });
   });
 
+  if (root.banners !== undefined && !Array.isArray(root.banners)) {
+    errors.push("banners: должно быть списком");
+  }
   entries(root.banners).forEach((e, i) => {
     const at = `banners[${i}]`;
+    if (typeof e !== "object" || e === null || Array.isArray(e)) return void errors.push(`${at}: запись должна быть объектом`);
     if (!isGame(e.game)) return void errors.push(`${at}: неизвестная игра ${JSON.stringify(e.game)}`);
     if (typeof e.title !== "string" || e.title.trim() === "" || e.title.length > 200) return void errors.push(`${at}: нужно название до 200 знаков`);
     const starts = typeof e.starts === "string" ? parseMoment(e.starts) : null;
@@ -87,8 +95,12 @@ export function parseOverrides(json: unknown): { ok: true; overrides: Overrides 
     });
   });
 
+  if (root.hide !== undefined && !Array.isArray(root.hide)) {
+    errors.push("hide: должно быть списком");
+  }
   entries(root.hide).forEach((e, i) => {
     const at = `hide[${i}]`;
+    if (typeof e !== "object" || e === null || Array.isArray(e)) return void errors.push(`${at}: запись должна быть объектом`);
     if (!isGame(e.game)) return void errors.push(`${at}: неизвестная игра ${JSON.stringify(e.game)}`);
     const hasCode = typeof e.code === "string";
     const hasBanner = typeof e.banner === "string";
