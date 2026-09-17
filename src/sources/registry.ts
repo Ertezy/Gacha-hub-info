@@ -152,7 +152,9 @@ function fandomBanners(spec: BannerPageSpec): SourceDef {
           let outcome = memory.pages[key]?.rev === rev ? memory.pages[key]!.outcome : undefined;
           if (outcome === undefined) {
             outcome = parseBannerPage(await pageWikitext(http, wiki, title), spec, title, wiki.pageUrl(title));
-            memory.pages[key] = { rev, outcome };
+            // Сломанная страница не запоминается — её нужно перечитать в следующий раз,
+            // когда шаблон поправят; удачный разбор (баннер или сознательный skip) кешируется.
+            if (outcome.kind !== "bad") memory.pages[key] = { rev, outcome };
           }
           if (outcome.kind === "banner") {
             parsed++;
