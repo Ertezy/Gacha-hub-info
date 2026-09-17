@@ -99,7 +99,7 @@ export function createHttp(options: HttpOptions = {}): Http {
   };
 }
 
-class StatusError extends Error {
+export class StatusError extends Error {
   status: number;
   constructor(status: number, url: string) {
     super(`ответ ${status}: ${url}`);

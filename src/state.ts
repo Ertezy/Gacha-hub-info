@@ -36,10 +36,22 @@ export const emptyState = (): State => ({
   memory: emptyMemory(),
 });
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+/** Файл состояния мог быть обрезан или отредактирован вручную: форма проверяется, а не только version. */
+function looksLikeState(value: unknown): value is State {
+  if (!isRecord(value) || value.version !== 1) return false;
+  if (!isRecord(value.lastRun) || !isRecord(value.failures)) return false;
+  const memory = value.memory;
+  if (!isRecord(memory)) return false;
+  return isRecord(memory.revisions) && isRecord(memory.pages) && isRecord(memory.validators) && Array.isArray(memory.kuro);
+}
+
 export function loadState(path = STATE_FILE): State | null {
   try {
-    const state = JSON.parse(readFileSync(path, "utf8")) as State;
-    return state.version === 1 ? state : null;
+    const raw: unknown = JSON.parse(readFileSync(path, "utf8"));
+    return looksLikeState(raw) ? raw : null;
   } catch {
     return null;
   }
@@ -76,4 +88,20 @@ export function baseFromPublished(hub: HubData): HubData {
     codes: hub.codes.filter((c) => c.source !== null),
     banners: hub.banners.filter((b) => b.url !== null),
   };
+}
+
+/**
+ * Без прошлых данных сломанный или пропущенный раздел слился бы в пустой список и вытеснил бы
+ * живой файл на Pages пустым разделом. По одному сообщению на каждый такой раздел — они уходят в
+ * общий список ошибок проверки, и публикация вместе с обновлением base сами собой не проходят.
+ */
+export function missingPrevious(runs: Map<string, SourceRun<Item>>, hadPrevious: boolean): string[] {
+  if (hadPrevious) return [];
+  const errors: string[] = [];
+  for (const [key, run] of runs) {
+    if (run.kind === "broken" || run.kind === "skipped") {
+      errors.push(`${key}: прошлых данных нет, а источник ${run.kind === "broken" ? "сломан" : "пропущен"} — раздел останется пустым`);
+    }
+  }
+  return errors;
 }
