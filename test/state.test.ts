@@ -3,9 +3,9 @@ import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { baseFromPublished, emptyState, isDue, loadState, recordRun, saveState } from "../src/state.ts";
+import { baseFromPublished, emptyState, isDue, loadState, missingPrevious, recordRun, saveState } from "../src/state.ts";
 import type { Failure } from "../src/issues.ts";
-import type { HubData } from "../src/types.ts";
+import type { HubData, Item, SourceRun } from "../src/types.ts";
 
 const NOW = 1_000_000;
 
@@ -17,6 +17,13 @@ test("пора ли опрашивать", () => {
   assert.equal(isDue(NOW - 5 * 3600, 6, NOW), false);
 });
 
+test("isDue: ровно на границе запаса — уже пора, секундой раньше — ещё нет", () => {
+  const everyHours = 2;
+  const boundary = NOW - (everyHours * 3600 - 300);
+  assert.equal(isDue(boundary, everyHours, NOW), true);
+  assert.equal(isDue(boundary + 1, everyHours, NOW), false);
+});
+
 test("счётчик неудач", () => {
   const failures: Record<string, Failure> = {};
   recordRun(failures, "a", { kind: "broken", error: "503" }, NOW - 3600);
@@ -26,6 +33,12 @@ test("счётчик неудач", () => {
   assert.equal(failures.a?.consecutive, 2);
   recordRun(failures, "a", { kind: "unchanged" }, NOW + 2);
   assert.equal(failures.a, undefined);
+});
+
+test("счётчик неудач: успешный запуск (ok) тоже стирает запись", () => {
+  const failures: Record<string, Failure> = { b: { consecutive: 3, since: NOW - 100, lastError: "x", lastAttempt: NOW - 50 } };
+  recordRun(failures, "b", { kind: "ok", items: [], parsed: 1, dropped: 0 }, NOW);
+  assert.equal(failures.b, undefined);
 });
 
 test("состояние сохраняется и читается; испорченное — null", () => {
@@ -40,6 +53,26 @@ test("состояние сохраняется и читается; испор�
   writeFileSync(path, JSON.stringify({ version: 99 }));
   assert.equal(loadState(path), null);
   assert.equal(loadState(join(dir, "missing.json")), null);
+});
+
+test("состояние без memory или с неполным memory считается отсутствующим", () => {
+  const dir = mkdtempSync(join(tmpdir(), "collector-"));
+  const path = join(dir, "state.json");
+  writeFileSync(path, JSON.stringify({ version: 1, base: null, published: null, lastPublishedAt: null, lastRun: {}, failures: {} }));
+  assert.equal(loadState(path), null, "memory отсутствует целиком");
+  writeFileSync(
+    path,
+    JSON.stringify({
+      version: 1,
+      base: null,
+      published: null,
+      lastPublishedAt: null,
+      lastRun: {},
+      failures: {},
+      memory: { revisions: {}, pages: {}, validators: {} },
+    }),
+  );
+  assert.equal(loadState(path), null, "у memory нет kuro");
 });
 
 test("из выложенного файла убираются записи владельца", () => {
@@ -60,4 +93,45 @@ test("из выложенного файла убираются записи в�
   const base = baseFromPublished(hub);
   assert.deepEqual(base.codes.map((c) => c.code), ["WIKICODE"]);
   assert.deepEqual(base.banners.map((b) => b.title), ["Wiki"]);
+});
+
+test("baseFromPublished не трогает остальные поля файла", () => {
+  const hub: HubData = {
+    version: 2,
+    updatedAt: 12345,
+    games: [{ id: "genshin", title: "Genshin Impact", match: { steamAppIds: [], epicAppNames: [], folderNames: [] } }],
+    codes: [],
+    banners: [],
+    videos: [{ gameId: "genshin", title: "T", url: "https://www.youtube.com/watch?v=1", thumb: null, publishedAt: 1, duration: null, premiere: false }],
+  };
+  const base = baseFromPublished(hub);
+  assert.equal(base.version, 2);
+  assert.equal(base.updatedAt, 12345);
+  assert.deepEqual(base.games, hub.games);
+  assert.deepEqual(base.videos, hub.videos);
+});
+
+test("без прошлых данных сломанный или пропущенный раздел — ошибка", () => {
+  const runs = new Map<string, SourceRun<Item>>([
+    ["genshin:codes", { kind: "broken", error: "503" }],
+    ["genshin:banners", { kind: "skipped" }],
+    ["hsr:codes", { kind: "ok", items: [], parsed: 1, dropped: 0 }],
+  ]);
+  const errors = missingPrevious(runs, false);
+  assert.equal(errors.length, 2);
+  assert.ok(errors.some((e) => e.includes("genshin:codes")));
+  assert.ok(errors.some((e) => e.includes("genshin:banners")));
+});
+
+test("без прошлых данных, но запасной источник заполнил раздел — без ошибки", () => {
+  const runs = new Map<string, SourceRun<Item>>([["genshin:codes", { kind: "ok", items: [], parsed: 1, dropped: 0 }]]);
+  assert.deepEqual(missingPrevious(runs, false), []);
+});
+
+test("прошлые данные есть — сломанный или пропущенный раздел не страшен", () => {
+  const runs = new Map<string, SourceRun<Item>>([
+    ["genshin:codes", { kind: "broken", error: "503" }],
+    ["genshin:banners", { kind: "skipped" }],
+  ]);
+  assert.deepEqual(missingPrevious(runs, true), []);
 });
