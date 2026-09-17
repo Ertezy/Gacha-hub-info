@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Http, HttpResponse } from "../src/http.ts";
+import { fandom } from "../src/mediawiki.ts";
 import { GAME_IDS } from "../src/types.ts";
 import { KURO_SIGNAL, SOURCES, emptyMemory, fetchKuroAnnouncements, wuwaKnownStarts } from "../src/sources/registry.ts";
 
@@ -87,6 +88,110 @@ test("баннеры с фандома: разобранные страницы 
   assert.deepEqual(wuwaKnownStarts(memory), [Date.UTC(2026, 8, 10, 9, 0) / 1000]);
   await source.run({ http: f.http, now: NOW, memory });
   assert.equal(f.urls.filter((u) => u.includes("action=parse")).length, 1, "вторая пробежка страницу не читала");
+});
+
+test("баннеры с фандома: сломанная подстраница перечитывается на следующем прогоне", async () => {
+  const badPage = `{{Convene
+|image = Banner A 2026-09-10.jpg
+|type = Featured Resonator
+|time_start = not-a-date
+|time_end = also-not-a-date
+}}`;
+  const f = fakeHttp([
+    (u) => (u.searchParams.get("list") === "categorymembers" ? json({ query: { categorymembers: [{ title: "Banner A/2026-09-10" }] } }) : undefined),
+    (u) => (u.searchParams.get("prop") === "info" ? json({ query: { pages: [{ title: "Banner A/2026-09-10", lastrevid: 9 }] } }) : undefined),
+    (u) => (u.searchParams.get("action") === "parse" ? json({ parse: { wikitext: badPage } }) : undefined),
+  ]);
+  const memory = emptyMemory();
+  const source = byId("wuthering-banners");
+  const first = await source.run({ http: f.http, now: NOW, memory });
+  assert.equal(first.kind, "broken");
+  const parsesAfterFirst = f.urls.filter((u) => u.includes("action=parse")).length;
+  const second = await source.run({ http: f.http, now: NOW, memory });
+  assert.equal(second.kind, first.kind, "тот же испорченный текст даёт тот же вердикт");
+  assert.equal(
+    f.urls.filter((u) => u.includes("action=parse")).length,
+    parsesAfterFirst + 1,
+    "вторая пробежка перечитала сломанную страницу, а не взяла её из памяти",
+  );
+});
+
+test("коды с фандома: сломанный разбор перечитывается на следующем прогоне", async () => {
+  // Строка кода без разрешённых символов — «выброшенная», без здоровых строк рядом,
+  // так что judge() сочтёт источник поломанным и не запомнит номер правки.
+  const badPage = "{{Redemption Code Row|not a code!!|ref=|A|{{Item List|Stellar Jade*50|mode=br}}|2026-08-16|unknown}}";
+  const f = fakeHttp([
+    (u) => (u.searchParams.get("prop") === "info" ? json({ query: { pages: [{ title: "Redemption Code", lastrevid: 5 }] } }) : undefined),
+    (u) => (u.searchParams.get("action") === "parse" ? json({ parse: { wikitext: badPage } }) : undefined),
+  ]);
+  const memory = emptyMemory();
+  const source = byId("hsr-codes");
+  const first = await source.run({ http: f.http, now: NOW, memory });
+  assert.equal(first.kind, "broken");
+  const parsesAfterFirst = f.urls.filter((u) => u.includes("action=parse")).length;
+  const second = await source.run({ http: f.http, now: NOW, memory });
+  assert.equal(second.kind, first.kind, "тот же испорченный текст даёт тот же вердикт");
+  assert.equal(
+    f.urls.filter((u) => u.includes("action=parse")).length,
+    parsesAfterFirst + 1,
+    "вторая пробежка перечитала сломанную страницу, а не взяла номер правки из памяти",
+  );
+});
+
+test("баннеры с фандома: страница, пропавшая из категории, удаляется из памяти", async () => {
+  const page = `{{Convene
+|image = Banner A 2026-09-10.jpg
+|type = Featured Resonator
+|time_start = 2026-09-10 10:00
+|time_end = 2026-09-29 11:59
+}}
+{{Convene/Pool
+|resonator_5_F = Hiyuki
+}}`;
+  const f = fakeHttp([
+    (u) => (u.searchParams.get("list") === "categorymembers" ? json({ query: { categorymembers: [{ title: "Banner A/2026-09-10" }] } }) : undefined),
+    (u) => (u.searchParams.get("prop") === "info" ? json({ query: { pages: [{ title: "Banner A/2026-09-10", lastrevid: 9 }] } }) : undefined),
+    (u) => (u.searchParams.get("action") === "parse" ? json({ parse: { wikitext: page } }) : undefined),
+    (u) => (u.searchParams.get("prop") === "imageinfo"
+      ? json({ query: { pages: [{ title: "File:Banner A 2026-09-10.jpg", imageinfo: [{ thumburl: "https://static.wikia.nocookie.net/a.jpg/scale-to-width-down/400" }] }] } })
+      : undefined),
+  ]);
+  const memory = emptyMemory();
+  const wiki = fandom("wutheringwaves");
+  const staleKey = `${wiki.api}|Old Banner/2026-01-01`;
+  const currentKey = `${wiki.api}|Banner A/2026-09-10`;
+  memory.pages[staleKey] = { rev: 1, outcome: { kind: "skip" } };
+  const source = byId("wuthering-banners");
+  const run = await source.run({ http: f.http, now: NOW, memory });
+  assert.equal(run.kind, "ok");
+  assert.equal(staleKey in memory.pages, false, "запись пропавшей подстраницы удалена");
+  assert.equal(currentKey in memory.pages, true, "запись текущей подстраницы осталась");
+});
+
+test("баннеры с фандома: сбой миниатюр не ломает источник, картинки просто нет", async () => {
+  const page = `{{Convene
+|image = Banner A 2026-09-10.jpg
+|type = Featured Resonator
+|time_start = 2026-09-10 10:00
+|time_end = 2026-09-29 11:59
+}}
+{{Convene/Pool
+|resonator_5_F = Hiyuki
+}}`;
+  const f = fakeHttp([
+    (u) => (u.searchParams.get("list") === "categorymembers" ? json({ query: { categorymembers: [{ title: "Banner A/2026-09-10" }] } }) : undefined),
+    (u) => (u.searchParams.get("prop") === "info" ? json({ query: { pages: [{ title: "Banner A/2026-09-10", lastrevid: 9 }] } }) : undefined),
+    (u) => (u.searchParams.get("action") === "parse" ? json({ parse: { wikitext: page } }) : undefined),
+    // Запрос миниатюр (imageinfo) нарочно не обслуживается — имитирует сбой сети.
+  ]);
+  const memory = emptyMemory();
+  const source = byId("wuthering-banners");
+  const run = await source.run({ http: f.http, now: NOW, memory });
+  assert.equal(run.kind, "ok");
+  if (run.kind === "ok") {
+    assert.equal(run.items.length, 1);
+    assert.equal((run.items[0] as { image: string | null }).image, null);
+  }
 });
 
 test("лента YouTube: 304 — unchanged", async () => {
