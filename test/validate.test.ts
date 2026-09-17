@@ -1,0 +1,61 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { validateHub } from "../src/validate.ts";
+import type { HubData } from "../src/types.ts";
+
+const good = (): HubData => ({
+  version: 2,
+  updatedAt: 1_788_000_000,
+  games: [{ id: "hsr", title: "Honkai: Star Rail", redeemUrl: "https://hsr.hoyoverse.com/gift?code={code}", match: { steamAppIds: [], epicAppNames: [], folderNames: [] } }],
+  codes: [{ gameId: "hsr", code: "ABCD1234", rewards: "Stellar Jade ×50", expiresAt: null, region: "all", source: "https://honkai-star-rail.fandom.com/wiki/Redemption_Code" }],
+  banners: [{ gameId: "hsr", title: "Over the Gilded Tides", featured: ["Aventurine"], rarity: 5, image: "https://static.wikia.nocookie.net/a.png", startsAt: 1, endsAt: 2, url: "https://honkai-star-rail.fandom.com/wiki/X" }],
+  videos: [{ gameId: "hsr", title: "Trailer", url: "https://www.youtube.com/watch?v=abc", thumb: "https://i1.ytimg.com/vi/abc/hqdefault.jpg", publishedAt: 5, duration: null, premiere: false }],
+});
+
+test("правильный файл проходит", () => {
+  assert.deepEqual(validateHub(good()), []);
+});
+
+test("ошибки называют путь к полю", () => {
+  const hub = good();
+  hub.codes[0]!.code = "BAD CODE";
+  hub.banners[0]!.endsAt = 1;
+  hub.banners[0]!.image = "http://insecure/a.png";
+  hub.videos[0]!.url = "https://evil.example/watch";
+  const errors = validateHub(hub);
+  assert.ok(errors.some((e) => e.startsWith("codes[0].code")));
+  assert.ok(errors.some((e) => e.startsWith("banners[0].endsAt")));
+  assert.ok(errors.some((e) => e.startsWith("banners[0].image")));
+  assert.ok(errors.some((e) => e.startsWith("videos[0].url")));
+});
+
+test("запись чужой игры и повтор игры в каталоге", () => {
+  const hub = good();
+  hub.codes[0]!.gameId = "genshin";
+  hub.games.push({ ...hub.games[0]! });
+  const errors = validateHub(hub);
+  assert.ok(errors.some((e) => e.startsWith("codes[0].gameId")));
+  assert.ok(errors.some((e) => e.startsWith("games[1].id")));
+});
+
+test("адрес погашения без {code} и не https", () => {
+  const hub = good();
+  hub.games[0]!.redeemUrl = "http://hsr.hoyoverse.com/gift";
+  assert.ok(validateHub(hub).some((e) => e.startsWith("games[0].redeemUrl")));
+});
+
+test("больше шести видео у игры", () => {
+  const hub = good();
+  hub.videos = Array.from({ length: 7 }, (_, i) => ({ ...hub.videos[0]!, publishedAt: i }));
+  assert.ok(validateHub(hub).some((e) => e.startsWith("videos: у hsr")));
+});
+
+test("файл больше потолка", () => {
+  assert.ok(validateHub(good(), 100).some((e) => e.startsWith("файл:")));
+});
+
+test("не больше пятидесяти ошибок", () => {
+  const hub = good();
+  hub.codes = Array.from({ length: 80 }, () => ({ ...hub.codes[0]!, code: "!" }));
+  assert.equal(validateHub(hub).length, 50);
+});
