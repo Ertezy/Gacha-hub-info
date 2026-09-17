@@ -27,7 +27,7 @@ export function validateHub(hub: HubData, maxBytes = MAX_FILE_BYTES): string[] {
     if (!(GAME_IDS as readonly string[]).includes(g.id) || gameIds.has(g.id)) fail(`games[${i}].id: неизвестная или повторная игра ${g.id}`);
     gameIds.add(g.id);
     if (!text(g.title, 1, 100)) fail(`games[${i}].title: 1–100 знаков`);
-    if (g.redeemUrl !== undefined && !(g.redeemUrl.startsWith("https://") && g.redeemUrl.includes("{code}"))) {
+    if (!(g.redeemUrl === undefined || (typeof g.redeemUrl === "string" && g.redeemUrl.startsWith("https://") && g.redeemUrl.includes("{code}")))) {
       fail(`games[${i}].redeemUrl: https с {code}`);
     }
   });
@@ -36,7 +36,7 @@ export function validateHub(hub: HubData, maxBytes = MAX_FILE_BYTES): string[] {
   hub.codes.forEach((c, i) => {
     const at = `codes[${i}]`;
     if (!knownGame(c.gameId)) fail(`${at}.gameId: игры ${c.gameId} нет в файле`);
-    if (!CODE_PATTERN.test(c.code)) fail(`${at}.code: латинские буквы и цифры, 4–40 знаков`);
+    if (!(typeof c.code === "string" && CODE_PATTERN.test(c.code))) fail(`${at}.code: латинские буквы и цифры, 4–40 знаков`);
     if (!text(c.rewards, 0, 300)) fail(`${at}.rewards: до 300 знаков`);
     if (c.expiresAt !== null && !isInt(c.expiresAt)) fail(`${at}.expiresAt: целое или null`);
     if (!text(c.region, 1, 16)) fail(`${at}.region: 1–16 знаков`);
@@ -62,7 +62,7 @@ export function validateHub(hub: HubData, maxBytes = MAX_FILE_BYTES): string[] {
     const at = `videos[${i}]`;
     if (!knownGame(v.gameId)) fail(`${at}.gameId: игры ${v.gameId} нет в файле`);
     if (!text(v.title, 0, 300)) fail(`${at}.title: до 300 знаков`);
-    if (!v.url.startsWith("https://www.youtube.com/")) fail(`${at}.url: только https://www.youtube.com/`);
+    if (!(typeof v.url === "string" && v.url.startsWith("https://www.youtube.com/"))) fail(`${at}.url: только https://www.youtube.com/`);
     if (!httpsOrNull(v.thumb)) fail(`${at}.thumb: https или null`);
     if (!isInt(v.publishedAt)) fail(`${at}.publishedAt: целое`);
     perGame.set(v.gameId, (perGame.get(v.gameId) ?? 0) + 1);

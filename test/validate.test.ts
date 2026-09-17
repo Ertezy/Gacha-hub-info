@@ -59,3 +59,19 @@ test("не больше пятидесяти ошибок", () => {
   hub.codes = Array.from({ length: 80 }, () => ({ ...hub.codes[0]!, code: "!" }));
   assert.equal(validateHub(hub).length, 50);
 });
+
+test("странные значения не вызывают исключение", () => {
+  const hub = {
+    version: 2,
+    updatedAt: 1_788_000_000,
+    games: [{ id: "hsr", title: "Test", redeemUrl: null as unknown, match: { steamAppIds: [], epicAppNames: [], folderNames: [] } }],
+    codes: [{ gameId: "hsr", code: 42 as unknown, rewards: "Test", expiresAt: null, region: "all", source: null }],
+    banners: [{ gameId: "hsr", title: "Test", featured: [null] as unknown, rarity: null, image: null, startsAt: 1, endsAt: 2, url: null }],
+    videos: [{ gameId: "hsr", title: "Test", url: null as unknown, thumb: null, publishedAt: 5, duration: null, premiere: false }],
+  } as unknown as HubData;
+  const errors = validateHub(hub);
+  assert.ok(errors.some((e) => e.startsWith("games[0].redeemUrl")));
+  assert.ok(errors.some((e) => e.startsWith("codes[0].code")));
+  assert.ok(errors.some((e) => e.startsWith("banners[0].featured")));
+  assert.ok(errors.some((e) => e.startsWith("videos[0].url")));
+});
