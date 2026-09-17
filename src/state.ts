@@ -97,11 +97,12 @@ export function baseFromPublished(hub: HubData): HubData {
  */
 export function missingPrevious(runs: Map<string, SourceRun<Item>>, hadPrevious: boolean): string[] {
   if (hadPrevious) return [];
-  const errors: string[] = [];
+  const offending: { key: string; broken: boolean }[] = [];
   for (const [key, run] of runs) {
-    if (run.kind === "broken" || run.kind === "skipped") {
-      errors.push(`${key}: прошлых данных нет, а источник ${run.kind === "broken" ? "сломан" : "пропущен"} — раздел останется пустым`);
-    }
+    if (run.kind === "broken" || run.kind === "skipped") offending.push({ key, broken: run.kind === "broken" });
   }
-  return errors;
+  // Раздел с одним и тем же именем всегда даёт один и тот же текст: сообщения попадают в тело
+  // задачи, и нестабильный порядок делал бы её похожей на изменившуюся, когда ничего не менялось.
+  offending.sort((a, b) => a.key.localeCompare(b.key));
+  return offending.map((o) => `${o.key}: прошлых данных нет, а источник ${o.broken ? "сломан" : "пропущен"} — раздел останется пустым`);
 }
