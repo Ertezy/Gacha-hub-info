@@ -74,27 +74,20 @@ const lastRun: Record<string, number> = { ...state.lastRun };
 const ctx = { http, now, memory };
 const runs = new Map<string, SourceRun<Item>>();
 const report: string[] = [];
-const sourceLines: { id: string; line: string }[] = [];
-
-/** Строка источника печатается сразу, чтобы более поздний сбой не стёр уже собранный журнал. */
-function logSource(id: string, line: string): void {
-  sourceLines.push({ id, line });
-  console.log(line);
-}
 
 await Promise.all(
   SOURCES.filter((s) => !s.fallback).map(async (source) => {
     const key = sectionKey(source.game, source.section);
     if (!isDue(lastRun[source.id], source.everyHours, now)) {
       runs.set(key, { kind: "skipped" });
-      logSource(source.id, `${source.id}: skipped`);
+      console.log(`${source.id}: skipped`);
       return;
     }
     const run = await source.run(ctx);
     lastRun[source.id] = now;
     recordRun(state.failures, source.id, run, now);
     runs.set(key, run);
-    logSource(source.id, `${source.id}: ${run.kind === "broken" ? `сломан — ${run.error}` : run.kind}`);
+    console.log(`${source.id}: ${run.kind === "broken" ? `сломан — ${run.error}` : run.kind}`);
   }),
 );
 
@@ -111,12 +104,9 @@ await Promise.all(
     const run = await source.run(ctx);
     recordRun(state.failures, source.id, run, now);
     if (run.kind === "ok") runs.set(key, run);
-    logSource(source.id, `${source.id} (запасной): ${run.kind === "broken" ? `сломан — ${run.error}` : run.kind}`);
+    console.log(`${source.id} (запасной): ${run.kind === "broken" ? `сломан — ${run.error}` : run.kind}`);
   }),
 );
-
-sourceLines.sort((a, b) => a.id.localeCompare(b.id));
-report.push(...sourceLines.map((s) => s.line));
 
 let announcements = memory.kuro.filter((a) => a.publishedAt >= now - 21 * 86400);
 if (isDue(lastRun[KURO_SIGNAL.id], KURO_SIGNAL.everyHours, now)) {
