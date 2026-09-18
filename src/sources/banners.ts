@@ -3,6 +3,7 @@
 
 import type { Banner, GameId } from "../types.ts";
 import { EUROPE_SERVER_OFFSET_MINUTES, atOffset, parseEnglishDate, parseIsoLike, parseOffset } from "../time.ts";
+import { bannerFits } from "../validate.ts";
 import { findTemplates, templateParams } from "../wikitext.ts";
 import { ENNEAD_SOURCE } from "./codes.ts";
 
@@ -57,12 +58,14 @@ export function parseBannerPage(wikitext: string, spec: BannerPageSpec, title: s
     .map((name) => name.trim())
     .filter((name) => name !== "" && !/^unknown/i.test(name));
   const image = (named.get("image") ?? "").trim();
+  const bannerTitle = title.split("/")[0]!.trim();
+  if (!bannerFits(bannerTitle, featured)) return { kind: "bad", reason: "название или список персонажей длиннее предела" };
   return {
     kind: "banner",
     draft: {
       banner: {
         gameId: spec.gameId,
-        title: title.split("/")[0]!.trim(),
+        title: bannerTitle,
         featured,
         rarity: spec.rarity,
         image: null,
@@ -124,11 +127,17 @@ export function parseEndfieldTable(expanded: string, pageUrl: string): { drafts:
       dropped++;
       continue;
     }
+    const bannerTitle = decode(title).trim();
+    const featured = operator ? [decode(operator).trim()] : [];
+    if (!bannerFits(bannerTitle, featured)) {
+      dropped++;
+      continue;
+    }
     drafts.push({
       banner: {
         gameId: "endfield",
-        title: decode(title).trim(),
-        featured: operator ? [decode(operator).trim()] : [],
+        title: bannerTitle,
+        featured,
         rarity: 6,
         image: null,
         startsAt,
@@ -181,11 +190,12 @@ export function parseEnneadBanners(
     parsed++;
     const startsAt = entry.start_time;
     const endsAt = entry.end_time;
-    if (typeof startsAt !== "number" || typeof endsAt !== "number" || startsAt >= endsAt) {
+    const title = featured.join(" / ");
+    if (typeof startsAt !== "number" || typeof endsAt !== "number" || startsAt >= endsAt || !bannerFits(title, featured)) {
       dropped++;
       continue;
     }
-    banners.push({ gameId, title: featured.join(" / "), featured, rarity: 5, image: null, startsAt, endsAt, url: ENNEAD_SOURCE });
+    banners.push({ gameId, title, featured, rarity: 5, image: null, startsAt, endsAt, url: ENNEAD_SOURCE });
   }
   return { found: true, banners, parsed, dropped };
 }

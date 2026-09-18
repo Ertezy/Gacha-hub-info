@@ -129,3 +129,46 @@ test("ennead.cc: испорченная запись (не объект) не р
   assert.equal(r.codes[0]!.code, "2BJ64QRZ7RT8");
   assert.equal(r.dropped, 1);
 });
+
+test("Genshin: пропавшая колонка срока (сдвиг позиционных полей) — строка выброшена, не «без срока»", () => {
+  // Колонку «дата обнаружения» убрали из шаблона на странице: осталось четыре
+  // позиционных поля вместо пяти, и то, что было сроком, встало на её место —
+  // настоящий срок для парсера пропал, а не стал пустым.
+  const SHIFTED = `{{Code Row|CODE1234|G|Primogem*60|2026-09-01}}`;
+  const r = parseRowCodes(SHIFTED, "Code Row", "genshin", GI_PAGE);
+  assert.equal(r.codes.length, 0);
+  assert.equal(r.parsed, 1);
+  assert.equal(r.dropped, 1);
+});
+
+test("Genshin: пустая ячейка срока — тоже выброшена, не «без срока»", () => {
+  const EMPTY = `{{Code Row|CODE5678|G|Primogem*60|2026-09-01|}}`;
+  const r = parseRowCodes(EMPTY, "Code Row", "genshin", GI_PAGE);
+  assert.equal(r.codes.length, 0);
+  assert.equal(r.dropped, 1);
+});
+
+test("Genshin: «unknown» по-прежнему остаётся кодом без срока", () => {
+  const UNKNOWN = `{{Code Row|CODE9999|G|Primogem*60|2026-09-01|unknown}}`;
+  const r = parseRowCodes(UNKNOWN, "Code Row", "genshin", GI_PAGE);
+  assert.equal(r.codes.length, 1);
+  assert.equal(r.codes[0]!.expiresAt, null);
+  assert.equal(r.dropped, 0);
+});
+
+test("Genshin: награда длиннее предела — строка выброшена и посчитана", () => {
+  const longRewards = "A".repeat(310);
+  const LONG = `{{Code Row|CODE0001|G|${longRewards}|2026-09-01|unknown}}`;
+  const r = parseRowCodes(LONG, "Code Row", "genshin", GI_PAGE);
+  assert.equal(r.codes.length, 0);
+  assert.equal(r.parsed, 1);
+  assert.equal(r.dropped, 1);
+});
+
+test("Genshin: незакрытая [[ в награде не проглатывает остаток строки", () => {
+  const UNCLOSED = `{{Code Row|CODE2222|G|Primogem*60 [[Broken link|2026-09-01|unknown}}`;
+  const r = parseRowCodes(UNCLOSED, "Code Row", "genshin", GI_PAGE);
+  assert.equal(r.codes.length, 1);
+  assert.equal(r.codes[0]!.expiresAt, null);
+  assert.equal(r.codes[0]!.rewards, "Primogem*60 [[Broken link");
+});
