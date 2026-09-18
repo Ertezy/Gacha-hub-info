@@ -90,7 +90,7 @@ export function planIssues(input: IssueInputs): IssueAction[] {
     "validation",
     input.validationErrors.length > 0,
     "Файл данных не прошёл проверку",
-    `Файл не выложен, в сети остаётся прошлый.\n\nОшибки:\n${list(input.validationErrors)}\n\nЗапуск: ${input.runUrl}`,
+    `Файл не выложен. Если раньше уже что-то публиковалось, в сети остаётся прошлая версия.\n\nОшибки:\n${list(input.validationErrors)}\n\nЗапуск: ${input.runUrl}`,
     `Файл снова проходит проверку, ${formatTime(input.now)}.`,
   );
   keep(
