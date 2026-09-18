@@ -39,10 +39,21 @@ export const emptyState = (): State => ({
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
+/**
+ * «Похоже на файл хаба» — минимальная проверка формы, а не полная (её делает validateHub).
+ * Используется и для полей base/published состояния, и для живого файла с Pages: без неё
+ * плохая форма где-нибудь позже роняет .filter()/.map() исключением.
+ */
+export function looksLikeHub(value: unknown): value is HubData {
+  return isRecord(value) && Array.isArray(value.codes) && Array.isArray(value.banners) && Array.isArray(value.videos);
+}
+
 /** Файл состояния мог быть обрезан или отредактирован вручную: форма проверяется, а не только version. */
 function looksLikeState(value: unknown): value is State {
   if (!isRecord(value) || value.version !== 1) return false;
   if (!isRecord(value.lastRun) || !isRecord(value.failures)) return false;
+  if (!(value.base === null || looksLikeHub(value.base))) return false;
+  if (!(value.published === null || looksLikeHub(value.published))) return false;
   const memory = value.memory;
   if (!isRecord(memory)) return false;
   return isRecord(memory.revisions) && isRecord(memory.pages) && isRecord(memory.validators) && Array.isArray(memory.kuro);
@@ -104,5 +115,7 @@ export function missingPrevious(runs: Map<string, SourceRun<Item>>, hadPrevious:
   // Раздел с одним и тем же именем всегда даёт один и тот же текст: сообщения попадают в тело
   // задачи, и нестабильный порядок делал бы её похожей на изменившуюся, когда ничего не менялось.
   offending.sort((a, b) => a.key.localeCompare(b.key));
-  return offending.map((o) => `${o.key}: прошлых данных нет, а источник ${o.broken ? "сломан" : "пропущен"} — раздел останется пустым`);
+  return offending.map(
+    (o) => `${o.key}: источник ${o.broken ? "сломан" : "пропущен"}, а прошлых данных для этого раздела нет — файл не выкладывается`,
+  );
 }
