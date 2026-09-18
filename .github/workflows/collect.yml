@@ -42,13 +42,13 @@ jobs:
           path: .collector-state
           key: collector-state-${{ github.run_id }}
       - name: Упаковать файл для Pages
-        if: steps.collect.outputs.publish == 'true'
+        if: always() && steps.collect.outputs.publish == 'true'
         uses: actions/upload-pages-artifact@v3
         with:
           path: public
   deploy:
     needs: collect
-    if: needs.collect.outputs.publish == 'true'
+    if: always() && needs.collect.result != 'cancelled' && needs.collect.outputs.publish == 'true'
     runs-on: ubuntu-latest
     environment: github-pages
     steps:
