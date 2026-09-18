@@ -42,22 +42,64 @@ export function findTemplates(text: string, name: string): string[] {
   return found;
 }
 
-/** Делит по `|` верхнего уровня: вложенные `{{ }}` и `[[ ]]` не режутся. */
+/**
+ * Позиции `open`/`close`, которые реально образуют согласованную пару, — обычным
+ * стеком. Незакрытый (или лишний закрывающий) токен в набор не попадает и ниже
+ * читается как обычный текст, а не как открывающая/закрывающая скобка.
+ */
+function matchedPairs(text: string, open: string, close: string): Set<number> {
+  const stack: number[] = [];
+  const matched = new Set<number>();
+  for (let j = 0; j < text.length - 1; j++) {
+    const two = text.slice(j, j + 2);
+    if (two === open) {
+      stack.push(j);
+      j++;
+    } else if (two === close) {
+      const start = stack.pop();
+      if (start !== undefined) {
+        matched.add(start);
+        matched.add(j);
+      }
+      j++;
+    }
+  }
+  return matched;
+}
+
+/**
+ * Делит по `|` верхнего уровня: вложенные `{{ }}` и `[[ ]]` не режутся.
+ * Глубина ссылок и шаблонов считается раздельно, и растёт только у токенов из
+ * согласованной пары — один незакрытый `[[` (или `{{`) не переводит счётчик в
+ * бесконечный плюс и не прячет остаток строки: он читается как обычный текст,
+ * а оставшиеся `|` по-прежнему делят поля.
+ */
 export function splitTopLevel(inner: string): string[] {
+  const templatePairs = matchedPairs(inner, "{{", "}}");
+  const linkPairs = matchedPairs(inner, "[[", "]]");
   const parts: string[] = [];
-  let depth = 0;
+  let templateDepth = 0;
+  let linkDepth = 0;
   let current = "";
   for (let j = 0; j < inner.length; j++) {
     const two = inner.slice(j, j + 2);
-    if (two === "{{" || two === "[[") {
-      depth++;
+    if (two === "{{" && templatePairs.has(j)) {
+      templateDepth++;
       current += two;
       j++;
-    } else if ((two === "}}" || two === "]]") && depth > 0) {
-      depth--;
+    } else if (two === "}}" && templatePairs.has(j)) {
+      templateDepth--;
       current += two;
       j++;
-    } else if (inner[j] === "|" && depth === 0) {
+    } else if (two === "[[" && linkPairs.has(j)) {
+      linkDepth++;
+      current += two;
+      j++;
+    } else if (two === "]]" && linkPairs.has(j)) {
+      linkDepth--;
+      current += two;
+      j++;
+    } else if (inner[j] === "|" && templateDepth === 0 && linkDepth === 0) {
       parts.push(current);
       current = "";
     } else {
