@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { findTemplates, plainText, rewardsText, stripComments, templateParams } from "../src/wikitext.ts";
+import { findTemplates, plainText, rewardsText, splitTopLevel, stripComments, templateParams } from "../src/wikitext.ts";
 
 const GENSHIN = `{{Code Row/Header}}<!--
    {{Code Row
@@ -51,4 +51,24 @@ test("награды: список через точку с запятой, Item
 
 test("простой текст из вики-разметки", () => {
   assert.equal(plainText("5-star: [[Denia]] and [[Baizhi|Bai]] '''bold'''<br />x"), "5-star: Denia and Bai bold x");
+});
+
+test("незакрытая [[ не проглатывает остаток строки", () => {
+  const parts = splitTopLevel("CODE1234|G|Rewards [[Some Link|2026-09-01|unknown");
+  assert.deepEqual(parts, ["CODE1234", "G", "Rewards [[Some Link", "2026-09-01", "unknown"]);
+});
+
+test("незакрытая {{ не проглатывает остаток строки", () => {
+  const parts = splitTopLevel("CODE1234|G|Rewards {{Item List|Foo*1|2026-09-01|unknown");
+  assert.deepEqual(parts, ["CODE1234", "G", "Rewards {{Item List", "Foo*1", "2026-09-01", "unknown"]);
+});
+
+test("незакрытые [[ и {{ вместе не проглатывают остаток строки", () => {
+  const parts = splitTopLevel("CODE1234|G|[[Link {{Tmpl|2026-09-01|unknown");
+  assert.deepEqual(parts, ["CODE1234", "G", "[[Link {{Tmpl", "2026-09-01", "unknown"]);
+});
+
+test("правильно вложенные {{ }} и [[ ]] по-прежнему не режутся", () => {
+  const parts = splitTopLevel("CODE1234|{{Item List|Foo*1;Bar*2|mode=br}}|[[Page|Text|with pipe]]|end");
+  assert.deepEqual(parts, ["CODE1234", "{{Item List|Foo*1;Bar*2|mode=br}}", "[[Page|Text|with pipe]]", "end"]);
 });
