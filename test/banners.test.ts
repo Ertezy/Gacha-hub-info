@@ -109,6 +109,13 @@ test("страница без шаблона или с концом раньше
   assert.equal(parseBannerPage(reversed, BANNER_PAGES.hsr, "X/2026-09-12", "https://h").kind, "bad");
 });
 
+test("Star Rail: слишком длинное имя персонажа в пуле — bad, не поднимает всю выкладку", () => {
+  const longName = "A".repeat(90);
+  const page = HSR_PAGE.replace("Aventurine • Waveflair", longName);
+  const out = parseBannerPage(page, BANNER_PAGES.hsr, "Over the Gilded Tides/2026-09-12", "https://hsr/page");
+  assert.equal(out.kind, "bad");
+});
+
 test("свежие датированные подстраницы", () => {
   const titles = ["Surging Ballad", "La Chanson Cerise/7.1", "Surging Ballad/2026-09-23", "Old Banner/2026-01-01", "Surging Ballad/2026-09-23"];
   assert.deepEqual(recentBannerPages(titles, utc(2026, 9, 15, 0, 0)), ["Surging Ballad/2026-09-23"]);
@@ -141,6 +148,15 @@ test("Endfield: время AM / EU, первый ограниченный опе
   ]);
 });
 
+test("Endfield: слишком длинное название баннера — строка выброшена и посчитана", () => {
+  const longTitle = "W".repeat(210);
+  const row = ENDFIELD.replace("Winter Hunt", longTitle);
+  const r = parseEndfieldTable(row, "https://endfield.wiki.gg/wiki/Headhunting/Banners");
+  assert.equal(r.parsed, 2);
+  assert.equal(r.dropped, 2);
+  assert.equal(r.drafts.length, 0);
+});
+
 test("ennead.cc: баннеры персонажей трёх игр", () => {
   const gi = parseEnneadBanners(
     { banners: [
@@ -169,4 +185,16 @@ test("ennead.cc: баннеры персонажей трёх игр", () => {
   );
   assert.deepEqual(zzz.banners.map((b) => b.featured), [["Claret"]]);
   assert.equal(parseEnneadBanners({ message: "route not found" }, "zzz").found, false);
+});
+
+test("ennead.cc: слишком длинное имя персонажа — баннер выброшен и посчитан", () => {
+  const longName = "B".repeat(90);
+  const r = parseEnneadBanners(
+    { banners: [{ characters: [{ name: longName, rarity: 5 }], start_time: 1788256800, end_time: 1790060399 }] },
+    "genshin",
+  );
+  assert.equal(r.found, true);
+  assert.equal(r.banners.length, 0);
+  assert.equal(r.parsed, 1);
+  assert.equal(r.dropped, 1);
 });

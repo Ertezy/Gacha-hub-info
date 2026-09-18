@@ -3,6 +3,7 @@
 
 import type { Code, GameId } from "../types.ts";
 import { atOffset, inTimeZone, parseEnglishDate, parseIsoLike } from "../time.ts";
+import { rewardsFits } from "../validate.ts";
 import { findTemplates, rewardsText, templateParams } from "../wikitext.ts";
 
 export interface ParsedCodes {
@@ -16,7 +17,11 @@ export const ENNEAD_SOURCE = "https://github.com/torikushiii/hoyoverse-api";
 
 export const CODE_PATTERN = /^[A-Za-z0-9]{4,40}$/;
 
-const NO_EXPIRY = new Set(["", "unknown", "indef", "indefinite", "tba"]);
+// "" сюда не входит: пустая или отсутствующая ячейка срока — это не «бессрочный код»,
+// а признак того, что позиционные поля сместились (например, редактор вики убрал
+// колонку даты обнаружения). Такая строка должна быть выброшена, а не тихо
+// превращена в код без срока — см. hoyoExpiry и вызывающий код ниже.
+const NO_EXPIRY = new Set(["unknown", "indef", "indefinite", "tba"]);
 
 /** Срок из ячейки страницы HoYoverse: null — без срока, undefined — не разобрать. */
 function hoyoExpiry(value: string): number | null | undefined {
@@ -57,12 +62,13 @@ export function parseRowCodes(
     parsed++;
     const expiresAt = hoyoExpiry(expiry);
     const group = cell.split(";").map((code) => code.trim());
-    if (expiresAt === undefined || group.some((code) => !CODE_PATTERN.test(code))) {
+    const rewardsValue = rewardsText(rewards);
+    if (expiresAt === undefined || group.some((code) => !CODE_PATTERN.test(code)) || !rewardsFits(rewardsValue)) {
       dropped++;
       continue;
     }
     for (const code of group) {
-      codes.push({ gameId, code, rewards: rewardsText(rewards), expiresAt, region: "all", source });
+      codes.push({ gameId, code, rewards: rewardsValue, expiresAt, region: "all", source });
     }
   }
   return { found, codes, parsed, dropped };
@@ -93,11 +99,12 @@ export function parseWuwaCodes(wikitext: string, source: string): ParsedCodes {
       }
       expiresAt = inTimeZone(parts, "America/Los_Angeles");
     }
-    if (!CODE_PATTERN.test(code)) {
+    const rewardsValue = rewardsText(m[2]!);
+    if (!CODE_PATTERN.test(code) || !rewardsFits(rewardsValue)) {
       dropped++;
       continue;
     }
-    codes.push({ gameId: "wuthering", code, rewards: rewardsText(m[2]!), expiresAt, region: "all", source });
+    codes.push({ gameId: "wuthering", code, rewards: rewardsValue, expiresAt, region: "all", source });
   }
   return { found: true, codes, parsed, dropped };
 }
@@ -115,12 +122,13 @@ export function parseEnneadCodes(json: unknown, gameId: GameId): ParsedCodes {
     }
     const item = entry as { code?: unknown; rewards?: unknown };
     const code = typeof item.code === "string" ? item.code.trim() : "";
-    const rewards = Array.isArray(item.rewards) ? item.rewards.filter((r) => typeof r === "string") : [];
-    if (!CODE_PATTERN.test(code)) {
+    const rewardsList = Array.isArray(item.rewards) ? item.rewards.filter((r) => typeof r === "string") : [];
+    const rewardsValue = rewardsList.join(", ");
+    if (!CODE_PATTERN.test(code) || !rewardsFits(rewardsValue)) {
       dropped++;
       continue;
     }
-    codes.push({ gameId, code, rewards: rewards.join(", "), expiresAt: null, region: "all", source: ENNEAD_SOURCE });
+    codes.push({ gameId, code, rewards: rewardsValue, expiresAt: null, region: "all", source: ENNEAD_SOURCE });
   }
   return { found: true, codes, parsed: active.length, dropped };
 }
