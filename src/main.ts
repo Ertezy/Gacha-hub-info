@@ -15,6 +15,7 @@ import {
   emptyState,
   isDue,
   loadState,
+  looksLikeHub,
   missingPrevious,
   recordRun,
   saveState,
@@ -32,7 +33,14 @@ const state = loadState() ?? emptyState();
 let liveHub: HubData | null = null;
 let liveCheckFailed: string | null = null;
 try {
-  liveHub = JSON.parse((await http.get(PAGES_URL)).body) as HubData;
+  const parsed: unknown = JSON.parse((await http.get(PAGES_URL)).body);
+  if (looksLikeHub(parsed)) {
+    liveHub = parsed;
+  } else {
+    // Валидный JSON не той формы — читать оттуда нечего; ведём себя так, будто файла нет,
+    // а не роняем прогон исключением где-то ниже по цепочке.
+    console.log("Файл на Pages не похож на файл хаба — считаем, что выложенного файла нет.");
+  }
 } catch (error) {
   if (error instanceof StatusError && error.status === 404) {
     // файла ещё нет — это не сбой, а ожидаемое состояние для нового репозитория

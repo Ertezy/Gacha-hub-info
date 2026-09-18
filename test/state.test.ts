@@ -75,6 +75,16 @@ test("состояние без memory или с неполным memory счи�
   assert.equal(loadState(path), null, "у memory нет kuro");
 });
 
+test("состояние с испорченным base или published считается отсутствующим", () => {
+  const dir = mkdtempSync(join(tmpdir(), "collector-"));
+  const path = join(dir, "state.json");
+  const valid = emptyState();
+  writeFileSync(path, JSON.stringify({ ...valid, base: {} }));
+  assert.equal(loadState(path), null, "base — не HubData");
+  writeFileSync(path, JSON.stringify({ ...valid, published: { codes: [], banners: [] } }));
+  assert.equal(loadState(path), null, "у published нет videos");
+});
+
 test("из выложенного файла убираются записи владельца", () => {
   const hub: HubData = {
     version: 2,
