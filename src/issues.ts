@@ -85,6 +85,14 @@ export function planIssues(input: IssueInputs): IssueAction[] {
     keep(key, f !== undefined && f.consecutive >= 2, `Не работает: ${label}`, text, `Заработал в ${formatTime(input.now)}.`);
   }
 
+  // Источник исчез из реестра — его запись о неудаче тоже исчезла (pruneState), и цикл выше
+  // эту задачу больше не посещает. Без этого она осталась бы открытой навсегда.
+  for (const [key, number] of openByKey) {
+    if (key.startsWith("source:") && !(key.slice("source:".length) in input.labels)) {
+      actions.push({ type: "close", number, comment: "Источника больше нет, задача закрыта." });
+    }
+  }
+
   const list = (errors: string[]) => errors.map((e) => `- ${e}`).join("\n");
   keep(
     "validation",

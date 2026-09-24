@@ -17,7 +17,7 @@ https://ertezy.github.io/Gacha-hub-info/hub.json
 | Баннеры Genshin, Star Rail, ZZZ, Wuthering Waves | фандом-вики этих игр | CC BY-SA 3.0 |
 | Баннеры Arknights: Endfield | endfield.wiki.gg | CC BY-SA 4.0 |
 | Запасной источник кодов и баннеров HoYoverse | [hoyoverse-api](https://github.com/torikushiii/hoyoverse-api) (api.ennead.cc) | — |
-| Видео | официальные каналы YouTube | — |
+| Видео | официальные каналы YouTube — английские и японские | — |
 
 Список новостей Wuthering Waves на официальном сайте Kuro Games тоже
 запрашивается — раз в 6 часов, — но только как сигнал «не вышел ли баннер,

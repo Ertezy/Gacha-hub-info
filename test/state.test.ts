@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { baseFromPublished, emptyState, isDue, loadState, missingPrevious, recordRun, saveState } from "../src/state.ts";
+import { baseFromPublished, emptyState, isDue, loadState, missingPrevious, pruneState, recordRun, saveState } from "../src/state.ts";
 import type { Failure } from "../src/issues.ts";
 import type { HubData, Item, SourceRun } from "../src/types.ts";
 
@@ -144,4 +144,18 @@ test("прошлые данные есть — сломанный или про�
     ["genshin:banners", { kind: "skipped" }],
   ]);
   assert.deepEqual(missingPrevious(runs, true), []);
+});
+
+test("из состояния уходят записи об источниках, которых больше нет", () => {
+  const state = emptyState();
+  state.lastRun = { "genshin-videos": 1, "genshin-videos-en": 2, "wuthering-signal": 3 };
+  state.failures = {
+    "genshin-videos": { consecutive: 3, since: 1, lastError: "x", lastAttempt: 1 },
+    "hsr-codes": { consecutive: 1, since: 2, lastError: "y", lastAttempt: 2 },
+  };
+  const removed = pruneState(state, new Set(["genshin-videos-en", "wuthering-signal", "hsr-codes"]));
+  assert.deepEqual(removed, ["genshin-videos"]);
+  assert.deepEqual(Object.keys(state.lastRun).sort(), ["genshin-videos-en", "wuthering-signal"]);
+  assert.deepEqual(Object.keys(state.failures), ["hsr-codes"]);
+  assert.deepEqual(pruneState(state, new Set(["genshin-videos-en", "wuthering-signal", "hsr-codes"])), []);
 });

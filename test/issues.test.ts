@@ -86,6 +86,19 @@ test("чужие открытые задачи не трогаются", () => {
   assert.deepEqual(planIssues(base({ open: [{ number: 1, key: "something-else" }] })), []);
 });
 
+test("источника больше нет — открытая задача о нём закрывается, живой источник — по обычному правилу и не дважды", () => {
+  const actions = planIssues(
+    base({
+      open: [
+        { number: 7, key: "source:genshin-videos" },
+        { number: 8, key: "source:wuthering-codes" },
+      ],
+    }),
+  );
+  assert.deepEqual(actions.map((a) => a.type), ["close", "close"]);
+  assert.deepEqual(actions.map((a) => (a.type === "close" ? a.number : null)).sort(), [7, 8]);
+});
+
 test("клиент GitHub: список, открытие, закрытие", async () => {
   const calls: { method: string; url: string; body?: unknown }[] = [];
   const fakeFetch = (async (url: string, init?: RequestInit) => {
