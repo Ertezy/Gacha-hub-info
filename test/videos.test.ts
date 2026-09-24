@@ -26,7 +26,7 @@ ${entry("bbbbbbbbbbb", "2026-09-14T10:00:00+00:00", "Other channel", "UCxxxxxxxx
 </feed>`;
 
 test("адрес ленты", () => {
-  assert.equal(feedUrl(CHANNELS.genshin), "https://www.youtube.com/feeds/videos.xml?channel_id=UCcum1rCJ5GJeQ_xv0xrohqg");
+  assert.equal(feedUrl(CHANNELS.genshin), "https://www.youtube.com/feeds/videos.xml?channel_id=UCiS882YPwZt1NfaM0gR0D9Q");
 });
 
 test("ролики по свежести, сущности раскодированы, чужой канал и битая дата выброшены", () => {
