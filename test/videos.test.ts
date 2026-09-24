@@ -1,8 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { GAME_IDS, VIDEO_LANGS } from "../src/types.ts";
 import { CHANNELS, feedUrl, parseYoutubeFeed } from "../src/sources/videos.ts";
 
-const entry = (id: string, published: string, title: string, channel = CHANNELS.endfield) => `
+const entry = (id: string, published: string, title: string, channel = CHANNELS.en.endfield) => `
  <entry>
   <id>yt:video:${id}</id>
   <yt:videoId>${id}</yt:videoId>
@@ -17,7 +18,7 @@ const entry = (id: string, published: string, title: string, channel = CHANNELS.
 
 const FEED = `<?xml version="1.0" encoding="UTF-8"?>
 <feed xmlns:yt="http://www.youtube.com/xml/schemas/2015" xmlns:media="http://search.yahoo.com/mrss/" xmlns="http://www.w3.org/2005/Atom">
- <yt:channelId>HgbMCAmdjqCQy38-_KlODg</yt:channelId>
+ <yt:channelId>owPaVRBzg8CE6K4CB6LJfw</yt:channelId>
  <title>Arknights: Endfield</title>
 ${entry("DgWvnA2NCm0", "2026-09-15T09:00:33+00:00", "Collab &amp; recap")}
 ${entry("o3jqcYXVGZM", "2026-09-12T10:00:13+00:00", "Short")}
@@ -25,17 +26,26 @@ ${entry("aaaaaaaaaaa", "not a date", "Broken")}
 ${entry("bbbbbbbbbbb", "2026-09-14T10:00:00+00:00", "Other channel", "UCxxxxxxxxxxxxxxxxxxxxxx")}
 </feed>`;
 
+test("десять каналов: у каждой игры английский и японский, все разные", () => {
+  const all = VIDEO_LANGS.flatMap((lang) => GAME_IDS.map((game) => CHANNELS[lang][game]));
+  assert.equal(all.length, 10);
+  assert.equal(new Set(all).size, 10);
+  for (const id of all) assert.match(id, /^UC[A-Za-z0-9_-]{22}$/);
+});
+
 test("адрес ленты", () => {
-  assert.equal(feedUrl(CHANNELS.genshin), "https://www.youtube.com/feeds/videos.xml?channel_id=UCiS882YPwZt1NfaM0gR0D9Q");
+  assert.equal(feedUrl(CHANNELS.en.genshin), "https://www.youtube.com/feeds/videos.xml?channel_id=UCiS882YPwZt1NfaM0gR0D9Q");
+  assert.equal(feedUrl(CHANNELS.ja.genshin), "https://www.youtube.com/feeds/videos.xml?channel_id=UCAVR6Q0YgYa8xwz8rdg9Mrg");
 });
 
 test("ролики по свежести, сущности раскодированы, чужой канал и битая дата выброшены", () => {
-  const r = parseYoutubeFeed(FEED, "endfield", CHANNELS.endfield);
+  const r = parseYoutubeFeed(FEED, "endfield", CHANNELS.en.endfield, "en");
   assert.equal(r.found, true);
   assert.equal(r.parsed, 4);
   assert.equal(r.dropped, 2);
   assert.deepEqual(r.videos[0], {
     gameId: "endfield",
+    lang: "en",
     title: "Collab & recap",
     url: "https://www.youtube.com/watch?v=DgWvnA2NCm0",
     thumb: "https://i1.ytimg.com/vi/DgWvnA2NCm0/hqdefault.jpg",
@@ -46,13 +56,20 @@ test("ролики по свежести, сущности раскодиров�
   assert.deepEqual(r.videos.map((v) => v.title), ["Collab & recap", "Short"]);
 });
 
+test("японская лента помечает ролики языком ja", () => {
+  const feed = `<feed>${entry("jp000000001", "2026-09-15T09:00:00+00:00", "告知", CHANNELS.ja.endfield)}</feed>`;
+  const r = parseYoutubeFeed(feed, "endfield", CHANNELS.ja.endfield, "ja");
+  assert.equal(r.videos.length, 1);
+  assert.equal(r.videos[0]!.lang, "ja");
+});
+
 test("не больше шести роликов", () => {
   const many = Array.from({ length: 9 }, (_, i) => entry(`vid${String(i).padStart(8, "0")}`, `2026-09-0${i + 1}T10:00:00+00:00`, `V${i}`)).join("");
-  const r = parseYoutubeFeed(`<feed>${many}</feed>`, "endfield", CHANNELS.endfield);
+  const r = parseYoutubeFeed(`<feed>${many}</feed>`, "endfield", CHANNELS.en.endfield, "en");
   assert.equal(r.videos.length, 6);
   assert.equal(r.videos[0]!.title, "V8");
 });
 
 test("не лента — not found", () => {
-  assert.equal(parseYoutubeFeed("<html>error</html>", "endfield", CHANNELS.endfield).found, false);
+  assert.equal(parseYoutubeFeed("<html>error</html>", "endfield", CHANNELS.en.endfield, "en").found, false);
 });

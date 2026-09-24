@@ -3,7 +3,7 @@
 
 import { CODE_PATTERN } from "./sources/codes.ts";
 import { VIDEOS_PER_GAME } from "./sources/videos.ts";
-import { GAME_IDS, type HubData } from "./types.ts";
+import { GAME_IDS, VIDEO_LANGS, type HubData } from "./types.ts";
 
 export const MAX_FILE_BYTES = 2 * 1024 * 1024;
 
@@ -75,18 +75,20 @@ export function validateHub(hub: HubData, maxBytes = MAX_FILE_BYTES): string[] {
     if (!isInt(b.endsAt) || b.endsAt <= b.startsAt) fail(`${at}.endsAt: целое и позже начала`);
   });
 
-  const perGame = new Map<string, number>();
+  const perGameLang = new Map<string, number>();
   hub.videos.forEach((v, i) => {
     const at = `videos[${i}]`;
     if (!knownGame(v.gameId)) fail(`${at}.gameId: игры ${v.gameId} нет в файле`);
+    if (!VIDEO_LANGS.includes(v.lang)) fail(`${at}.lang: en или ja`);
     if (!text(v.title, 0, 300)) fail(`${at}.title: до 300 знаков`);
     if (!(typeof v.url === "string" && v.url.startsWith("https://www.youtube.com/"))) fail(`${at}.url: только https://www.youtube.com/`);
     if (!httpsOrNull(v.thumb)) fail(`${at}.thumb: https или null`);
     if (!isInt(v.publishedAt)) fail(`${at}.publishedAt: целое`);
-    perGame.set(v.gameId, (perGame.get(v.gameId) ?? 0) + 1);
+    const key = `${v.gameId}:${v.lang}`;
+    perGameLang.set(key, (perGameLang.get(key) ?? 0) + 1);
   });
-  for (const [game, count] of perGame) {
-    if (count > VIDEOS_PER_GAME) fail(`videos: у ${game} ${count} роликов, больше ${VIDEOS_PER_GAME}`);
+  for (const [key, count] of perGameLang) {
+    if (count > VIDEOS_PER_GAME) fail(`videos: у ${key} ${count} роликов, больше ${VIDEOS_PER_GAME}`);
   }
 
   const bytes = Buffer.byteLength(JSON.stringify(hub), "utf8");

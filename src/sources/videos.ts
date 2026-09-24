@@ -1,18 +1,27 @@
-// Ленты YouTube официальных англоязычных каналов. Канал сверяется по
-// идентификатору. У Endfield английский канал — @ArknightsEndfieldEN: лента
-// основного @ArknightsEndfield пуста.
+// Ленты YouTube официальных каналов игр — английских и японских (спека
+// этапа 6 §3.1). Канал сверяется по идентификатору. У Endfield английский
+// канал — @ArknightsEndfieldEN: лента основного @ArknightsEndfield пуста.
 
-import type { GameId, Video } from "../types.ts";
+import type { GameId, Video, VideoLang } from "../types.ts";
 
-export const CHANNELS: Record<GameId, string> = {
-  genshin: "UCiS882YPwZt1NfaM0gR0D9Q",
-  hsr: "UC2PeMPA8PAOp-bynLoCeMLA",
-  zzz: "UC2SpC8rL9LaeQriE4YNdyzA",
-  wuthering: "UC0Bi5KMcECRVYis5Gb_ZYZQ",
-  endfield: "UCowPaVRBzg8CE6K4CB6LJfw",
+export const CHANNELS: Record<VideoLang, Record<GameId, string>> = {
+  en: {
+    genshin: "UCiS882YPwZt1NfaM0gR0D9Q",
+    hsr: "UC2PeMPA8PAOp-bynLoCeMLA",
+    zzz: "UC2SpC8rL9LaeQriE4YNdyzA",
+    wuthering: "UC0Bi5KMcECRVYis5Gb_ZYZQ",
+    endfield: "UCowPaVRBzg8CE6K4CB6LJfw",
+  },
+  ja: {
+    genshin: "UCAVR6Q0YgYa8xwz8rdg9Mrg",
+    hsr: "UCrzCIt5o0X88G9bCdrdbv6g",
+    zzz: "UCt09C9DPSuOGpHoitbcyCIQ",
+    wuthering: "UCGc93NguHRwzv1Rw9MyIcxQ",
+    endfield: "UCGVCAOZvDH7_fmuRVxkusFQ",
+  },
 };
 
-/** Столько роликов показывает панель приложения. */
+/** Столько роликов на каждом языке показывает панель приложения. */
 export const VIDEOS_PER_GAME = 6;
 
 export const feedUrl = (channelId: string) => `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`;
@@ -25,6 +34,7 @@ export function parseYoutubeFeed(
   xml: string,
   gameId: GameId,
   channelId: string,
+  lang: VideoLang,
 ): { found: boolean; videos: Video[]; parsed: number; dropped: number } {
   if (!xml.includes("<feed")) return { found: false, videos: [], parsed: 0, dropped: 0 };
   const videos: Video[] = [];
@@ -44,6 +54,7 @@ export function parseYoutubeFeed(
     }
     videos.push({
       gameId,
+      lang,
       title: decode(title).trim(),
       url,
       thumb: thumb?.startsWith("https://") ? thumb : null,

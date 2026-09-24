@@ -3,7 +3,7 @@
 import type { Http, Validators } from "../http.ts";
 import { judge } from "../items.ts";
 import { ENDFIELD_WIKI, categoryMembers, expandTemplates, fandom, lastRevisions, pageWikitext, thumbnails, type Wiki } from "../mediawiki.ts";
-import type { Banner, GameId, Item, Section, SourceRun } from "../types.ts";
+import { GAME_IDS, VIDEO_LANGS, type Banner, type GameId, type Item, type Section, type SourceRun, type VideoLang } from "../types.ts";
 import { BANNER_PAGES, parseBannerPage, parseEndfieldTable, parseEnneadBanners, recentBannerPages, type BannerDraft, type BannerPageSpec, type PageOutcome } from "./banners.ts";
 import { parseEnneadCodes, parseRowCodes, parseWuwaCodes } from "./codes.ts";
 import { KURO_MENU_URL, conveneAnnouncements, type Announcement } from "./kuro.ts";
@@ -28,6 +28,8 @@ export interface SourceDef {
   id: string;
   game: GameId;
   section: Section;
+  /** Только у видео: язык канала. Входит в ключ раздела (`genshin:videos:ja`). */
+  lang?: VideoLang;
   label: string;
   everyHours: number;
   fallback: boolean;
@@ -187,20 +189,24 @@ const endfieldBanners: SourceDef = {
     }),
 };
 
-function youtube(game: GameId): SourceDef {
-  const url = feedUrl(CHANNELS[game]);
+const LANG_LABELS: Record<VideoLang, string> = { en: "англ.", ja: "япон." };
+
+function youtube(game: GameId, lang: VideoLang): SourceDef {
+  const channel = CHANNELS[lang][game];
+  const url = feedUrl(channel);
   return {
-    id: `${game}-videos`,
+    id: `${game}-videos-${lang}`,
     game,
     section: "videos",
-    label: `видео ${TITLES[game]} (YouTube)`,
+    lang,
+    label: `видео ${TITLES[game]} (YouTube, ${LANG_LABELS[lang]})`,
     everyHours: 1,
     fallback: false,
     run: (ctx) =>
       guarded(async () => {
         const res = await conditional(ctx, url);
         if (res === null) return { kind: "unchanged" };
-        const r = parseYoutubeFeed(res.body, game, CHANNELS[game]);
+        const r = parseYoutubeFeed(res.body, game, channel, lang);
         const verdict = judge("videos", r.found, r.videos, r.parsed, r.dropped);
         if (verdict.kind === "ok") ctx.memory.validators[url] = res.validators;
         return verdict;
@@ -224,11 +230,7 @@ export const SOURCES: SourceDef[] = [
   ennead("zzz", "banners"),
   fandomBanners(BANNER_PAGES.wuthering),
   endfieldBanners,
-  youtube("genshin"),
-  youtube("hsr"),
-  youtube("zzz"),
-  youtube("wuthering"),
-  youtube("endfield"),
+  ...GAME_IDS.flatMap((game) => VIDEO_LANGS.map((lang) => youtube(game, lang))),
 ];
 
 export const KURO_SIGNAL = { id: "wuthering-signal", label: "анонсы баннеров Wuthering Waves (сайт Kuro Games)", everyHours: 6 } as const;
