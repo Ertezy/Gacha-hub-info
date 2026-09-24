@@ -195,7 +195,7 @@ test("баннеры с фандома: сбой миниатюр не лома�
 });
 
 test("лента YouTube: 304 — unchanged", async () => {
-  const feed = `<feed><entry><yt:videoId>abc</yt:videoId><yt:channelId>UCt09C9DPSuOGpHoitbcyCIQ</yt:channelId><title>T</title><link rel="alternate" href="https://www.youtube.com/watch?v=abc"/><published>2026-09-15T10:00:00+00:00</published></entry></feed>`;
+  const feed = `<feed><entry><yt:videoId>abc</yt:videoId><yt:channelId>UC2SpC8rL9LaeQriE4YNdyzA</yt:channelId><title>T</title><link rel="alternate" href="https://www.youtube.com/watch?v=abc"/><published>2026-09-15T10:00:00+00:00</published></entry></feed>`;
   const f = fakeHttp([(u) => (u.host === "www.youtube.com" ? { status: 200, body: feed, validators: { etag: '"e1"' } } : undefined)]);
   const memory = emptyMemory();
   const source = byId("zzz-videos");

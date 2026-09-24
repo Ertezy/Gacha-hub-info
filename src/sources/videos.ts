@@ -1,14 +1,15 @@
-// Ленты YouTube официальных каналов. Канал сверяется по идентификатору:
-// заголовок ленты YouTube переводит по стране запроса.
+// Ленты YouTube официальных англоязычных каналов. Канал сверяется по
+// идентификатору. У Endfield английский канал — @ArknightsEndfieldEN: лента
+// основного @ArknightsEndfield пуста.
 
 import type { GameId, Video } from "../types.ts";
 
 export const CHANNELS: Record<GameId, string> = {
-  genshin: "UCcum1rCJ5GJeQ_xv0xrohqg",
-  hsr: "UCrzCIt5o0X88G9bCdrdbv6g",
-  zzz: "UCt09C9DPSuOGpHoitbcyCIQ",
-  wuthering: "UCGc93NguHRwzv1Rw9MyIcxQ",
-  endfield: "UCHgbMCAmdjqCQy38-_KlODg",
+  genshin: "UCiS882YPwZt1NfaM0gR0D9Q",
+  hsr: "UC2PeMPA8PAOp-bynLoCeMLA",
+  zzz: "UC2SpC8rL9LaeQriE4YNdyzA",
+  wuthering: "UC0Bi5KMcECRVYis5Gb_ZYZQ",
+  endfield: "UCowPaVRBzg8CE6K4CB6LJfw",
 };
 
 /** Столько роликов показывает панель приложения. */
