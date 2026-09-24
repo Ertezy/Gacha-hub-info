@@ -17,6 +17,7 @@ import {
   loadState,
   looksLikeHub,
   missingPrevious,
+  pruneState,
   recordRun,
   saveState,
 } from "./state.ts";
@@ -27,6 +28,8 @@ const dryRun = process.argv.includes("--dry-run");
 const now = Math.floor(Date.now() / 1000);
 const http = createHttp();
 const state = loadState() ?? emptyState();
+const knownIds = new Set<string>([...SOURCES.map((s) => s.id), KURO_SIGNAL.id]);
+for (const id of pruneState(state, knownIds)) console.log(`Источника ${id} больше нет — запись о нём убрана.`);
 
 // Живой файл проверяется на каждом прогоне, не только когда состояния нет:
 // когда состояние есть, он ещё и подтверждает, что прошлая выкладка дошла (см. ниже).

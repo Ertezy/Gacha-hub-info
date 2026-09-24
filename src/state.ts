@@ -92,6 +92,21 @@ export function recordRun(failures: Record<string, Failure>, sourceId: string, r
   };
 }
 
+/** Убирает записи об источниках, которых больше нет (спека этапа 6 §3.1).
+ *  Иначе старая неудача держала бы задачу о поломке открытой вечно: удалить
+ *  её может только удачный опрос того же источника. */
+export function pruneState(state: State, knownIds: ReadonlySet<string>): string[] {
+  const removed = new Set<string>();
+  for (const record of [state.lastRun, state.failures] as Record<string, unknown>[]) {
+    for (const id of Object.keys(record)) {
+      if (knownIds.has(id)) continue;
+      delete record[id];
+      removed.add(id);
+    }
+  }
+  return [...removed].sort();
+}
+
 /** Прошлые данные из выложенного файла без записей владельца: они вернутся из overrides.json. */
 export function baseFromPublished(hub: HubData): HubData {
   return {
