@@ -2,9 +2,10 @@
 
 import { isLive } from "./items.ts";
 import { VIDEOS_PER_GAME } from "./sources/videos.ts";
-import { GAME_IDS, type Banner, type Code, type GameId, type HubData, type HubGame, type Item, type Section, type SourceRun, type Video } from "./types.ts";
+import { GAME_IDS, VIDEO_LANGS, type Banner, type Code, type GameId, type HubData, type HubGame, type Item, type Section, type SourceRun, type Video, type VideoLang } from "./types.ts";
 
-export const sectionKey = (game: GameId, section: Section) => `${game}:${section}`;
+export const sectionKey = (game: GameId, section: Section, lang?: VideoLang) =>
+  lang === undefined ? `${game}:${section}` : `${game}:${section}:${lang}`;
 
 export interface MergeInput {
   previous: HubData | null;
@@ -13,12 +14,17 @@ export interface MergeInput {
   now: number;
 }
 
-function sectionItems(input: MergeInput, game: GameId, section: Section): Item[] {
-  const run = input.runs.get(sectionKey(game, section));
+/** Язык видео из прошлого файла: у записей до этапа 6 поля нет — это английские. */
+const langOf = (item: Item): VideoLang => (item as Partial<Video>).lang ?? "en";
+
+function sectionItems(input: MergeInput, game: GameId, section: Section, lang?: VideoLang): Item[] {
+  const run = input.runs.get(sectionKey(game, section, lang));
   const items: Item[] =
     run?.kind === "ok"
       ? run.items
-      : ((input.previous?.[section] ?? []) as Item[]).filter((item) => item.gameId === game);
+      : ((input.previous?.[section] ?? []) as Item[]).filter(
+          (item) => item.gameId === game && (lang === undefined || langOf(item) === lang),
+        );
   return items.filter((item) => isLive(section, item, input.now));
 }
 
@@ -35,9 +41,14 @@ export function mergeHub(input: MergeInput): HubData {
       codes.push(code);
     }
     banners.push(...(sectionItems(input, game, "banners") as Banner[]).sort((a, b) => a.startsAt - b.startsAt));
-    videos.push(
-      ...(sectionItems(input, game, "videos") as Video[]).sort((a, b) => b.publishedAt - a.publishedAt).slice(0, VIDEOS_PER_GAME),
-    );
+    for (const lang of VIDEO_LANGS) {
+      videos.push(
+        ...(sectionItems(input, game, "videos", lang) as Video[])
+          .map((v) => ({ ...v, lang }))
+          .sort((a, b) => b.publishedAt - a.publishedAt)
+          .slice(0, VIDEOS_PER_GAME),
+      );
+    }
   }
   return { version: 2, updatedAt: input.now, games: input.catalog, codes, banners, videos };
 }

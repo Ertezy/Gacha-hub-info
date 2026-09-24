@@ -27,15 +27,20 @@ const json = (value: unknown, etag?: string): HttpResponse => ({ status: 200, bo
 const byId = (id: string) => SOURCES.find((s) => s.id === id)!;
 const NOW = Date.UTC(2026, 8, 16, 12, 0) / 1000;
 
-test("у каждой игры есть источники кодов, баннеров и видео, кроме кодов Endfield", () => {
+test("у каждой игры есть источники кодов и баннеров и видео на двух языках, кроме кодов Endfield", () => {
   const ids = SOURCES.map((s) => s.id);
   assert.equal(new Set(ids).size, ids.length);
   for (const game of GAME_IDS) {
-    for (const section of ["codes", "banners", "videos"] as const) {
+    for (const section of ["codes", "banners"] as const) {
       const primary = SOURCES.filter((s) => s.game === game && s.section === section && !s.fallback);
       assert.equal(primary.length, game === "endfield" && section === "codes" ? 0 : 1, `${game} ${section}`);
     }
+    const videos = SOURCES.filter((s) => s.game === game && s.section === "videos");
+    assert.deepEqual(videos.map((s) => s.id).sort(), [`${game}-videos-en`, `${game}-videos-ja`]);
+    assert.deepEqual(videos.map((s) => s.lang).sort(), ["en", "ja"]);
+    assert.ok(videos.every((s) => !s.fallback && s.everyHours === 1));
   }
+  assert.ok(SOURCES.filter((s) => s.section !== "videos").every((s) => s.lang === undefined));
   assert.deepEqual(SOURCES.filter((s) => s.fallback).map((s) => s.id).sort(), [
     "genshin-banners-ennead", "genshin-codes-ennead", "hsr-banners-ennead", "hsr-codes-ennead", "zzz-banners-ennead", "zzz-codes-ennead",
   ]);
@@ -198,9 +203,18 @@ test("лента YouTube: 304 — unchanged", async () => {
   const feed = `<feed><entry><yt:videoId>abc</yt:videoId><yt:channelId>UC2SpC8rL9LaeQriE4YNdyzA</yt:channelId><title>T</title><link rel="alternate" href="https://www.youtube.com/watch?v=abc"/><published>2026-09-15T10:00:00+00:00</published></entry></feed>`;
   const f = fakeHttp([(u) => (u.host === "www.youtube.com" ? { status: 200, body: feed, validators: { etag: '"e1"' } } : undefined)]);
   const memory = emptyMemory();
-  const source = byId("zzz-videos");
+  const source = byId("zzz-videos-en");
   assert.equal((await source.run({ http: f.http, now: NOW, memory })).kind, "ok");
   assert.equal((await source.run({ http: f.http, now: NOW, memory })).kind, "unchanged");
+});
+
+test("японская лента — отдельный источник со своим адресом", async () => {
+  const feed = `<feed><entry><yt:videoId>jpv</yt:videoId><yt:channelId>UCt09C9DPSuOGpHoitbcyCIQ</yt:channelId><title>予告</title><link rel="alternate" href="https://www.youtube.com/watch?v=jpv"/><published>2026-09-15T10:00:00+00:00</published></entry></feed>`;
+  const f = fakeHttp([(u) => (u.searchParams.get("channel_id") === "UCt09C9DPSuOGpHoitbcyCIQ" ? { status: 200, body: feed, validators: {} } : undefined)]);
+  const run = await byId("zzz-videos-ja").run({ http: f.http, now: NOW, memory: emptyMemory() });
+  assert.equal(run.kind, "ok");
+  if (run.kind === "ok") assert.equal((run.items[0] as { lang: string }).lang, "ja");
+  assert.deepEqual(f.urls, ["https://www.youtube.com/feeds/videos.xml?channel_id=UCt09C9DPSuOGpHoitbcyCIQ"]);
 });
 
 test("анонсы Kuro: разбор и повтор из памяти при 304", async () => {

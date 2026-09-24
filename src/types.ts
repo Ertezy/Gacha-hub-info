@@ -31,8 +31,13 @@ export interface Banner {
   url: string | null;
 }
 
+/** Языки видео: английский — основной, японский — по выбору в приложении (спека этапа 6 §3). */
+export type VideoLang = "en" | "ja";
+export const VIDEO_LANGS: readonly VideoLang[] = ["en", "ja"];
+
 export interface Video {
   gameId: GameId;
+  lang: VideoLang;
   title: string;
   url: string;
   thumb: string | null;

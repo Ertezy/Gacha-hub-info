@@ -9,7 +9,7 @@ const good = (): HubData => ({
   games: [{ id: "hsr", title: "Honkai: Star Rail", redeemUrl: "https://hsr.hoyoverse.com/gift?code={code}", match: { steamAppIds: [], epicAppNames: [], folderNames: [] } }],
   codes: [{ gameId: "hsr", code: "ABCD1234", rewards: "Stellar Jade ×50", expiresAt: null, region: "all", source: "https://honkai-star-rail.fandom.com/wiki/Redemption_Code" }],
   banners: [{ gameId: "hsr", title: "Over the Gilded Tides", featured: ["Aventurine"], rarity: 5, image: "https://static.wikia.nocookie.net/a.png", startsAt: 1, endsAt: 2, url: "https://honkai-star-rail.fandom.com/wiki/X" }],
-  videos: [{ gameId: "hsr", title: "Trailer", url: "https://www.youtube.com/watch?v=abc", thumb: "https://i1.ytimg.com/vi/abc/hqdefault.jpg", publishedAt: 5, duration: null, premiere: false }],
+  videos: [{ gameId: "hsr", lang: "en", title: "Trailer", url: "https://www.youtube.com/watch?v=abc", thumb: "https://i1.ytimg.com/vi/abc/hqdefault.jpg", publishedAt: 5, duration: null, premiere: false }],
 });
 
 test("правильный файл проходит", () => {
@@ -67,11 +67,24 @@ test("странные значения не вызывают исключени
     games: [{ id: "hsr", title: "Test", redeemUrl: null as unknown, match: { steamAppIds: [], epicAppNames: [], folderNames: [] } }],
     codes: [{ gameId: "hsr", code: 42 as unknown, rewards: "Test", expiresAt: null, region: "all", source: null }],
     banners: [{ gameId: "hsr", title: "Test", featured: [null] as unknown, rarity: null, image: null, startsAt: 1, endsAt: 2, url: null }],
-    videos: [{ gameId: "hsr", title: "Test", url: null as unknown, thumb: null, publishedAt: 5, duration: null, premiere: false }],
+    videos: [{ gameId: "hsr", lang: "en", title: "Test", url: null as unknown, thumb: null, publishedAt: 5, duration: null, premiere: false }],
   } as unknown as HubData;
   const errors = validateHub(hub);
   assert.ok(errors.some((e) => e.startsWith("games[0].redeemUrl")));
   assert.ok(errors.some((e) => e.startsWith("codes[0].code")));
   assert.ok(errors.some((e) => e.startsWith("banners[0].featured")));
   assert.ok(errors.some((e) => e.startsWith("videos[0].url")));
+});
+
+test("видео: язык обязателен, лимит шесть на игру и язык", () => {
+  const v = (n: number, lang: unknown) => ({ gameId: "hsr", lang, title: `V${n}`, url: `https://www.youtube.com/watch?v=${n}`, thumb: null, publishedAt: n, duration: null, premiere: false });
+  const base = good();
+  const twelve = { ...base, videos: [...[1, 2, 3, 4, 5, 6].map((n) => v(n, "en")), ...[7, 8, 9, 10, 11, 12].map((n) => v(n, "ja"))] } as unknown as HubData;
+  assert.deepEqual(validateHub(twelve), []);
+  const sevenEn = { ...base, videos: [1, 2, 3, 4, 5, 6, 7].map((n) => v(n, "en")) } as unknown as HubData;
+  assert.ok(validateHub(sevenEn).some((e) => e.includes("hsr:en")));
+  const noLang = { ...base, videos: [v(1, undefined)] } as unknown as HubData;
+  assert.ok(validateHub(noLang).some((e) => e.includes("lang")));
+  const odd = { ...base, videos: [v(1, "fr")] } as unknown as HubData;
+  assert.ok(validateHub(odd).some((e) => e.includes("lang")));
 });

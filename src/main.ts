@@ -85,7 +85,7 @@ const report: string[] = [];
 
 await Promise.all(
   SOURCES.filter((s) => !s.fallback).map(async (source) => {
-    const key = sectionKey(source.game, source.section);
+    const key = sectionKey(source.game, source.section, source.lang);
     if (!isDue(lastRun[source.id], source.everyHours, now)) {
       runs.set(key, { kind: "skipped" });
       console.log(`${source.id}: skipped`);
@@ -101,7 +101,7 @@ await Promise.all(
 
 await Promise.all(
   SOURCES.filter((s) => s.fallback).map(async (source) => {
-    const key = sectionKey(source.game, source.section);
+    const key = sectionKey(source.game, source.section, source.lang);
     const mainKind = runs.get(key)?.kind;
     if (mainKind !== "broken") {
       // Основной источник пропущен в этом прогоне (не наступил час) — это не «он здоров»,

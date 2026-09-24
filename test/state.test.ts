@@ -112,7 +112,7 @@ test("baseFromPublished не трогает остальные поля файл
     games: [{ id: "genshin", title: "Genshin Impact", match: { steamAppIds: [], epicAppNames: [], folderNames: [] } }],
     codes: [],
     banners: [],
-    videos: [{ gameId: "genshin", title: "T", url: "https://www.youtube.com/watch?v=1", thumb: null, publishedAt: 1, duration: null, premiere: false }],
+    videos: [{ gameId: "genshin", lang: "en", title: "T", url: "https://www.youtube.com/watch?v=1", thumb: null, publishedAt: 1, duration: null, premiere: false }],
   };
   const base = baseFromPublished(hub);
   assert.equal(base.version, 2);
