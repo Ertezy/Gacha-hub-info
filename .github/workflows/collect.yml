@@ -20,12 +20,12 @@ jobs:
     outputs:
       publish: ${{ steps.collect.outputs.publish }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: "24.19"
       - name: Состояние прошлого запуска
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: .collector-state
           key: collector-state-${{ github.run_id }}-${{ github.run_attempt }}
@@ -37,13 +37,13 @@ jobs:
         run: node src/main.ts
       - name: Сохранить состояние
         if: always() && hashFiles('.collector-state/state.json') != ''
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: .collector-state
           key: collector-state-${{ github.run_id }}-${{ github.run_attempt }}
       - name: Упаковать файл для Pages
         if: always() && steps.collect.outputs.publish == 'true'
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: public
   deploy:
@@ -52,4 +52,4 @@ jobs:
     runs-on: ubuntu-latest
     environment: github-pages
     steps:
-      - uses: actions/deploy-pages@v4
+      - uses: actions/deploy-pages@v5
