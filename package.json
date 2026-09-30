@@ -1,6 +1,10 @@
 {
   "name": "gacha-hub-info",
   "private": true,
+  "description": "Data collector for Gacha Hub: promo codes, banners and videos in one hub.json",
+  "license": "MIT",
+  "author": "Ertezy",
+  "repository": { "type": "git", "url": "https://github.com/Ertezy/Gacha-hub-info" },
   "type": "module",
   "engines": { "node": ">=24.19" },
   "scripts": {
