@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import type { Http, HttpResponse } from "../src/http.ts";
 import { fandom } from "../src/mediawiki.ts";
 import { GAME_IDS } from "../src/types.ts";
-import { KURO_SIGNAL, SOURCES, emptyMemory, fetchKuroAnnouncements, wuwaKnownStarts } from "../src/sources/registry.ts";
+import { KURO_MENU_URL, kuroArticleUrl, kuroBanners, type KuroBannerFact } from "../src/sources/kuro.ts";
+import { KURO_SIGNAL, SOURCES, emptyMemory, fetchKuroAnnouncements, kuroFactsFromMemory, wuwaKnownStarts } from "../src/sources/registry.ts";
 
 type Route = (url: URL) => HttpResponse | undefined;
 
@@ -217,14 +218,209 @@ test("японская лента — отдельный источник со �
   assert.deepEqual(f.urls, ["https://www.youtube.com/feeds/videos.xml?channel_id=UCt09C9DPSuOGpHoitbcyCIQ"]);
 });
 
-test("анонсы Kuro: разбор и повтор из памяти при 304", async () => {
-  const menu = [{ articleId: 5431, articleTitle: "[Version 3.6 Featured Resonator/Weapon Convene: Phase II]", startTime: "2026-09-09 11:15:00" }];
-  const f = fakeHttp([(u) => (u.host === "hw-media-cdn-mingchao.kurogame.com" ? json(menu, '"k1"') : undefined)]);
+// Синтетические статьи Kuro: названия, имена и даты придуманы, от настоящих взяты только служебные фразы.
+const KURO_MENU_PATH = "/ArticleMenu.json";
+const articlePath = (id: number) => `/article/${id}.json`;
+const KURO_MENU = [
+  { articleId: 9001, articleTitle: "[Version 9.9 Featured Resonator/Weapon Convene: Phase I]", startTime: "2026-09-15 11:15:00" },
+  { articleId: 9101, articleTitle: "Patch Notes for Wuthering Waves Version 9.9: Synthetic Title", startTime: "2026-09-14 12:00:00" },
+  { articleId: 9105, articleTitle: "Resonator Review | Synthetic", startTime: "2026-09-15 18:00:00" },
+];
+const ANNOUNCEMENT_HTML =
+  "<p>[Test Banner] Featured Resonator Convene</p>" +
+  "<p>During the event, 5-Star Resonator: Resonator A, 4-Star Resonators: B, C receive boosted drop rates!</p>" +
+  "<p>Version 9.9 update - 2026-10-22 09:59 (server time)</p>";
+const NOTES_HTML = "<p>Version 9.9 update</p><p>Maintenance Time: 2026-09-17 04:00 - 2026-09-17 11:00 (UTC+8)</p>";
+const article = (id: number, html: string, etag: string) => json({ articleId: id, articleTitle: "Synthetic", articleContent: html }, etag);
+const FACT: KuroBannerFact = { title: "Test Banner", featured: "Resonator A", start: { kind: "release", version: "9.9" }, endsAt: Date.UTC(2026, 9, 22, 8, 59) / 1000 };
+const RELEASE_END = Date.UTC(2026, 8, 17, 3, 0) / 1000;
+
+/** Сайт Kuro, который можно «выключать» по частям и у которого можно менять меню. */
+function kuroSite() {
+  const site = {
+    menu: KURO_MENU as unknown[],
+    menuEtag: '"m1"',
+    menuDown: false,
+    down: new Set<number>(),
+    html: { 9001: ANNOUNCEMENT_HTML, 9101: NOTES_HTML } as Record<number, string>,
+    etags: { 9001: '"a1"', 9101: '"n1"' } as Record<number, string>,
+    seen: [] as { url: string; etag: string | undefined }[],
+  };
+  const f = fakeHttp([
+    (u) => {
+      if (u.host !== "hw-media-cdn-mingchao.kurogame.com") return undefined;
+      if (u.pathname.endsWith(KURO_MENU_PATH)) {
+        if (site.menuDown) throw new Error("меню недоступно");
+        return json(site.menu, site.menuEtag);
+      }
+      const id = Number(/\/article\/(\d+)\.json$/.exec(u.pathname)?.[1]);
+      if (site.down.has(id)) throw new Error(`статья ${id} недоступна`);
+      const html = site.html[id];
+      return html === undefined ? undefined : article(id, html, site.etags[id]!);
+    },
+  ]);
+  const http: Http = {
+    get(url, validators) {
+      site.seen.push({ url, etag: validators?.etag });
+      return f.http.get(url, validators);
+    },
+  };
+  const requests = (path: string) => site.seen.filter((r) => r.url.endsWith(path));
+  return { site, http, requests };
+}
+
+test("анонсы Kuro: меню, статья анонса и патчноут читаются, из них запоминаются только факты", async () => {
+  const k = kuroSite();
   const memory = emptyMemory();
-  const first = await fetchKuroAnnouncements({ http: f.http, now: NOW, memory });
-  assert.equal(first.ok && first.announcements[0]?.articleId, 5431);
-  const second = await fetchKuroAnnouncements({ http: f.http, now: NOW, memory });
-  assert.equal(second.ok && second.announcements[0]?.articleId, 5431);
+  const result = await fetchKuroAnnouncements({ http: k.http, now: NOW, memory });
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.deepEqual(result.announcements.map((a) => a.articleId), [9001]);
+  assert.deepEqual(result.warnings, []);
+  assert.deepEqual(memory.kuroFacts, { "9001": [FACT] });
+  assert.deepEqual(memory.kuroReleases, { "9.9": RELEASE_END });
+  assert.deepEqual(memory.kuroPatchNotes.map((p) => p.articleId), [9101]);
+  assert.deepEqual(memory.kuro.map((a) => a.articleId), [9001]);
+  assert.equal(k.requests(articlePath(9105)).length, 0, "статья про резонатора не читается");
+  const banners = kuroBanners(kuroFactsFromMemory(memory, result.announcements), memory.kuroReleases, NOW);
+  assert.deepEqual(banners.map((b) => [b.title, b.featured, b.startsAt, b.endsAt, b.url, b.image]), [
+    ["Test Banner", ["Resonator A"], RELEASE_END, FACT.endsAt, kuroArticleUrl(9001), null],
+  ]);
+  assert.ok(!JSON.stringify(memory).includes("Featured Resonator Convene"), "текста статьи в памяти нет");
+});
+
+test("анонсы Kuro: при 304 всё берётся из памяти, и каждый запрос условный", async () => {
+  const k = kuroSite();
+  const memory = emptyMemory();
+  await fetchKuroAnnouncements({ http: k.http, now: NOW, memory });
+  k.site.html[9001] = "<p>изменённый текст с теми же метками версии</p>";
+  const before = k.site.seen.length;
+  const second = await fetchKuroAnnouncements({ http: k.http, now: NOW, memory });
+  assert.equal(second.ok && second.announcements[0]?.articleId, 9001);
+  assert.deepEqual(memory.kuroFacts, { "9001": [FACT] }, "304 не перечитывает статью — прошлый результат остался");
+  assert.deepEqual(memory.kuroReleases, { "9.9": RELEASE_END });
+  const again = k.site.seen.slice(before);
+  assert.equal(again.length, 3, "меню и две статьи");
+  assert.ok(again.every((r) => r.etag !== undefined), "все запросы с условными заголовками");
+});
+
+test("анонсы Kuro: изменившаяся статья читается заново", async () => {
+  const k = kuroSite();
+  const memory = emptyMemory();
+  await fetchKuroAnnouncements({ http: k.http, now: NOW, memory });
+  k.site.html[9001] = ANNOUNCEMENT_HTML.replace("Test Banner", "Renamed Banner");
+  k.site.etags[9001] = '"a2"';
+  const result = await fetchKuroAnnouncements({ http: k.http, now: NOW, memory });
+  assert.equal(result.ok, true);
+  assert.equal(memory.kuroFacts["9001"]?.[0]?.title, "Renamed Banner");
+});
+
+test("анонсы Kuro: сбой статьи не ломает прогон и не стирает прошлые факты", async () => {
+  const k = kuroSite();
+  const memory = emptyMemory();
+  await fetchKuroAnnouncements({ http: k.http, now: NOW, memory });
+  k.site.down.add(9001);
+  k.site.down.add(9101);
+  const result = await fetchKuroAnnouncements({ http: k.http, now: NOW, memory });
+  assert.equal(result.ok, true, "меню отработало — источник не сломан");
+  if (result.ok) {
+    assert.equal(result.warnings.length, 2);
+    assert.match(result.warnings[0]!, /9001/);
+  }
+  assert.deepEqual(memory.kuroFacts, { "9001": [FACT] });
+  assert.deepEqual(memory.kuroReleases, { "9.9": RELEASE_END });
+  k.site.down.clear();
+  const healed = await fetchKuroAnnouncements({ http: k.http, now: NOW, memory });
+  assert.deepEqual(healed.ok && healed.warnings, []);
+  assert.deepEqual(memory.kuroFacts, { "9001": [FACT] });
+});
+
+test("анонсы Kuro: новая статья, которая не открылась, перечитывается на следующем прогоне, даже если меню не менялось", async () => {
+  const k = kuroSite();
+  k.site.down.add(9001);
+  const memory = emptyMemory();
+  const first = await fetchKuroAnnouncements({ http: k.http, now: NOW, memory });
+  assert.equal(first.ok && first.warnings.length, 1);
+  assert.deepEqual(memory.kuroFacts, {}, "фактов нет, но анонс в списке остаётся — по нему сработает сигнал");
+  assert.deepEqual(first.ok && first.announcements.map((a) => a.articleId), [9001]);
+  k.site.down.clear();
+  await fetchKuroAnnouncements({ http: k.http, now: NOW, memory });
+  assert.equal(k.requests(articlePath(9001)).length, 2, "второй запрос статьи — при неизменном меню");
+  assert.deepEqual(memory.kuroFacts, { "9001": [FACT] });
+});
+
+test("анонсы Kuro: статья без articleContent — предупреждение, а метки версии не запоминаются", async () => {
+  const k = kuroSite();
+  const memory = emptyMemory();
+  const http: Http = {
+    get: (url, validators) =>
+      url.endsWith(articlePath(9001)) ? Promise.resolve(json({ articleId: 9001, message: "oops" }, '"x"')) : k.http.get(url, validators),
+  };
+  const result = await fetchKuroAnnouncements({ http, now: NOW, memory });
+  assert.equal(result.ok && result.warnings.length, 1);
+  assert.equal(Object.keys(memory.validators).some((key) => key.endsWith(articlePath(9001))), false);
+  assert.deepEqual(memory.kuroFacts, {});
+});
+
+test("анонсы Kuro: устаревшее забывается вместе с метками версий, статьи не запрашиваются", async () => {
+  const k = kuroSite();
+  const memory = emptyMemory();
+  await fetchKuroAnnouncements({ http: k.http, now: NOW, memory });
+  assert.equal(Object.keys(memory.validators).filter((key) => key.includes("/article/")).length, 2);
+  const before = k.site.seen.length;
+  const later = NOW + 30 * 86400;
+  const result = await fetchKuroAnnouncements({ http: k.http, now: later, memory });
+  assert.deepEqual(result.ok && result.announcements, []);
+  assert.deepEqual(memory.kuro, []);
+  assert.deepEqual(memory.kuroPatchNotes, []);
+  assert.deepEqual(memory.kuroFacts, {});
+  assert.deepEqual(memory.kuroReleases, {});
+  assert.equal(Object.keys(memory.validators).filter((key) => key.includes("/article/")).length, 0);
+  assert.ok(memory.validators[KURO_MENU_URL], "метки меню остаются");
+  assert.equal(k.site.seen.length - before, 1, "только меню");
+});
+
+test("анонсы Kuro: меню не отвечает — поломка источника, память нетронута", async () => {
+  const k = kuroSite();
+  const memory = emptyMemory();
+  await fetchKuroAnnouncements({ http: k.http, now: NOW, memory });
+  const snapshot = structuredClone(memory);
+  k.site.menuDown = true;
+  const result = await fetchKuroAnnouncements({ http: k.http, now: NOW, memory });
+  assert.equal(result.ok, false);
+  assert.deepEqual(memory, snapshot);
+});
+
+test("анонсы Kuro: меню другой формы — поломка источника, факты не трогаются", async () => {
+  const k = kuroSite();
+  const memory = emptyMemory();
+  await fetchKuroAnnouncements({ http: k.http, now: NOW, memory });
+  k.site.menu = { error: "changed" } as unknown as unknown[];
+  k.site.menuEtag = '"m2"';
+  const result = await fetchKuroAnnouncements({ http: k.http, now: NOW, memory });
+  assert.equal(result.ok, false);
+  assert.deepEqual(memory.kuroFacts, { "9001": [FACT] });
+});
+
+test("анонсы Kuro: патчноут без строки техработ убирает прежний срок версии", async () => {
+  const k = kuroSite();
+  const memory = emptyMemory();
+  memory.kuroReleases["9.9"] = 5;
+  k.site.html[9101] = "<p>Version 9.9 update</p><p>No maintenance line here</p>";
+  const result = await fetchKuroAnnouncements({ http: k.http, now: NOW, memory });
+  assert.equal(result.ok && result.warnings.length, 0);
+  assert.deepEqual(memory.kuroReleases, {});
+});
+
+test("факты Kuro из памяти: у анонса без разобранной статьи баннеров нет", () => {
+  const memory = emptyMemory();
+  memory.kuroFacts["9001"] = [FACT];
+  const a = { articleId: 9001, publishedAt: NOW - 100, url: kuroArticleUrl(9001) };
+  const b = { articleId: 9002, publishedAt: NOW - 50, url: kuroArticleUrl(9002) };
+  assert.deepEqual(kuroFactsFromMemory(memory, [b, a]), [
+    { announcement: b, banners: [] },
+    { announcement: a, banners: [FACT] },
+  ]);
 });
 
 test("сетевая ошибка — поломка источника, а не исключение", async () => {

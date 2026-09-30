@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { baseFromPublished, emptyState, isDue, loadState, missingPrevious, pruneState, recordRun, saveState } from "../src/state.ts";
 import type { Failure } from "../src/issues.ts";
+import { KURO_MENU_URL, kuroArticleUrl } from "../src/sources/kuro.ts";
 import type { HubData, Item, SourceRun } from "../src/types.ts";
 
 const NOW = 1_000_000;
@@ -158,4 +159,61 @@ test("из состояния уходят записи об источника�
   assert.deepEqual(Object.keys(state.lastRun).sort(), ["genshin-videos-en", "wuthering-signal"]);
   assert.deepEqual(Object.keys(state.failures), ["hsr-codes"]);
   assert.deepEqual(pruneState(state, new Set(["genshin-videos-en", "wuthering-signal", "hsr-codes"])), []);
+});
+
+test("состояние прошлой версии без фактов Kuro загружается с пустыми умолчаниями, а меню будет прочитано заново", () => {
+  const dir = mkdtempSync(join(tmpdir(), "collector-"));
+  const path = join(dir, "state.json");
+  const kuroMemory = { revisions: { a: 1 }, pages: {}, validators: { [KURO_MENU_URL]: { etag: '"k1"' }, other: { etag: '"o1"' } }, kuro: [] };
+  writeFileSync(
+    path,
+    JSON.stringify({ version: 1, base: null, published: null, lastPublishedAt: null, lastRun: {}, failures: {}, memory: kuroMemory }),
+  );
+  const loaded = loadState(path);
+  assert.ok(loaded);
+  assert.deepEqual(loaded.memory.kuroFacts, {});
+  assert.deepEqual(loaded.memory.kuroReleases, {});
+  assert.deepEqual(loaded.memory.kuroPatchNotes, []);
+  assert.deepEqual(loaded.memory.revisions, { a: 1 }, "остальная память на месте");
+  // Без этого меню при ответе 304 оставило бы патчноуты неизвестными до следующего анонса.
+  assert.deepEqual(loaded.memory.validators, { other: { etag: '"o1"' } });
+});
+
+test("факты Kuro в состоянии сохраняются и читаются как есть, метки меню остаются", () => {
+  const dir = mkdtempSync(join(tmpdir(), "collector-"));
+  const path = join(dir, "state.json");
+  const state = emptyState();
+  state.memory.kuroFacts["9001"] = [{ title: "Test Banner", featured: "Resonator A", start: { kind: "release", version: "9.9" }, endsAt: NOW }];
+  state.memory.kuroReleases["9.9"] = NOW - 100;
+  state.memory.kuroPatchNotes = [{ articleId: 9101, version: "9.9", publishedAt: NOW - 200 }];
+  state.memory.validators[KURO_MENU_URL] = { etag: '"k2"' };
+  saveState(state, path);
+  assert.deepEqual(loadState(path), state);
+});
+
+test("факты Kuro не того вида — состояние считается отсутствующим", () => {
+  const dir = mkdtempSync(join(tmpdir(), "collector-"));
+  const path = join(dir, "state.json");
+  const valid = emptyState();
+  writeFileSync(path, JSON.stringify({ ...valid, memory: { ...valid.memory, kuroFacts: [] } }));
+  assert.equal(loadState(path), null, "kuroFacts — список");
+  writeFileSync(path, JSON.stringify({ ...valid, memory: { ...valid.memory, kuroReleases: 5 } }));
+  assert.equal(loadState(path), null, "kuroReleases — число");
+  writeFileSync(path, JSON.stringify({ ...valid, memory: { ...valid.memory, kuroPatchNotes: {} } }));
+  assert.equal(loadState(path), null, "kuroPatchNotes — не список");
+});
+
+test("из выложенного файла убираются и баннеры Kuro: они пересчитываются из памяти каждый прогон", () => {
+  const hub: HubData = {
+    version: 2,
+    updatedAt: NOW,
+    games: [],
+    codes: [],
+    banners: [
+      { gameId: "wuthering", title: "Wiki", featured: [], rarity: 5, image: null, startsAt: 1, endsAt: 2, url: "https://wiki/b" },
+      { gameId: "wuthering", title: "Kuro", featured: ["A"], rarity: 5, image: null, startsAt: 1, endsAt: 2, url: kuroArticleUrl(9001) },
+    ],
+    videos: [],
+  };
+  assert.deepEqual(baseFromPublished(hub).banners.map((b) => b.title), ["Wiki"]);
 });

@@ -5,8 +5,8 @@ import { createHttp, StatusError } from "./http.ts";
 import { applyIssueActions, createGitHub, planIssues } from "./issues.ts";
 import { mergeHub, sameData, sectionKey } from "./merge.ts";
 import { applyOverrides, parseMoment, parseOverrides, type Overrides } from "./overrides.ts";
-import { unknownToWiki } from "./sources/kuro.ts";
-import { KURO_SIGNAL, SOURCES, fetchKuroAnnouncements, wuwaKnownStarts } from "./sources/registry.ts";
+import { isFresh, kuroBanners, unknownToWiki, withKuroBanners } from "./sources/kuro.ts";
+import { KURO_SIGNAL, SOURCES, fetchKuroAnnouncements, kuroFactsFromMemory, wuwaKnownStarts } from "./sources/registry.ts";
 import {
   PAGES_URL,
   REPUBLISH_SECONDS,
@@ -119,13 +119,15 @@ await Promise.all(
   }),
 );
 
-let announcements = memory.kuro.filter((a) => a.publishedAt >= now - 21 * 86400);
+let announcements = memory.kuro.filter((a) => isFresh(a.publishedAt, now));
 if (isDue(lastRun[KURO_SIGNAL.id], KURO_SIGNAL.everyHours, now)) {
   const result = await fetchKuroAnnouncements(ctx);
   lastRun[KURO_SIGNAL.id] = now;
   if (result.ok) {
     announcements = result.announcements;
     delete state.failures[KURO_SIGNAL.id];
+    // Сбой одной статьи не роняет прогон: факты остаются прошлые, статья перечитается в следующий раз.
+    for (const warning of result.warnings) console.log(`${KURO_SIGNAL.id}: ${warning}`);
   } else {
     recordRun(state.failures, KURO_SIGNAL.id, { kind: "broken", error: result.error }, now);
   }
@@ -133,6 +135,11 @@ if (isDue(lastRun[KURO_SIGNAL.id], KURO_SIGNAL.everyHours, now)) {
 
 const hadPrevious = state.base !== null;
 const base = mergeHub({ previous: state.base, catalog, runs, now });
+
+// Баннеры по официальным анонсам Kuro — пока фандом их не знает. Считаются каждый прогон
+// из памяти и в state.base не попадают: base остаётся данными одного фандома.
+const kuro = kuroBanners(kuroFactsFromMemory(memory, announcements), memory.kuroReleases, now);
+const withKuro = withKuroBanners(base, kuro);
 
 let overrides: Overrides = { codes: [], banners: [], hide: [] };
 let overridesErrors: string[] = [];
@@ -144,12 +151,13 @@ try {
   overridesErrors = [`не читается как JSON: ${(error as Error).message}`];
 }
 
-const hub = applyOverrides(base, overrides, now);
+const hub = applyOverrides(withKuro, overrides, now);
 const validationErrors = validateHub(hub);
 validationErrors.push(...missingPrevious(runs, hadPrevious));
 
 const knownStarts = [
   ...wuwaKnownStarts(memory),
+  ...kuro.map((b) => b.startsAt),
   ...overrides.banners.filter((b) => b.game === "wuthering").flatMap((b) => {
     const at = parseMoment(b.starts);
     return at === null ? [] : [at];

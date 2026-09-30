@@ -6,17 +6,45 @@ import { ENDFIELD_WIKI, categoryMembers, expandTemplates, fandom, lastRevisions,
 import { GAME_IDS, VIDEO_LANGS, type Banner, type GameId, type Item, type Section, type SourceRun, type VideoLang } from "../types.ts";
 import { BANNER_PAGES, parseBannerPage, parseEndfieldTable, parseEnneadBanners, recentBannerPages, type BannerDraft, type BannerPageSpec, type PageOutcome } from "./banners.ts";
 import { parseEnneadCodes, parseRowCodes, parseWuwaCodes } from "./codes.ts";
-import { KURO_MENU_URL, conveneAnnouncements, type Announcement } from "./kuro.ts";
+import {
+  KURO_ARTICLE_JSON_DIR,
+  KURO_MENU_URL,
+  articleText,
+  conveneAnnouncements,
+  isFresh,
+  kuroArticleJsonUrl,
+  kuroBannerFacts,
+  maintenanceEnd,
+  type Announcement,
+  type AnnouncementFacts,
+  type KuroBannerFact,
+  type PatchNotes,
+} from "./kuro.ts";
 import { CHANNELS, feedUrl, parseYoutubeFeed } from "./videos.ts";
 
 export interface SourceMemory {
   revisions: Record<string, number>;
   pages: Record<string, { rev: number; outcome: PageOutcome }>;
   validators: Record<string, Validators>;
+  /** Свежие анонсы баннеров из меню Kuro. */
   kuro: Announcement[];
+  /** Свежие патчноуты из меню: при ответе 304 по ним видно, какие статьи ещё читать. */
+  kuroPatchNotes: PatchNotes[];
+  /** Баннеры, прочитанные из статьи анонса, — по номеру статьи строкой. Только факты, текста нет. */
+  kuroFacts: Record<string, KuroBannerFact[]>;
+  /** Конец техработ версии, из её патчноута, — по номеру версии. */
+  kuroReleases: Record<string, number>;
 }
 
-export const emptyMemory = (): SourceMemory => ({ revisions: {}, pages: {}, validators: {}, kuro: [] });
+export const emptyMemory = (): SourceMemory => ({
+  revisions: {},
+  pages: {},
+  validators: {},
+  kuro: [],
+  kuroPatchNotes: [],
+  kuroFacts: {},
+  kuroReleases: {},
+});
 
 export interface SourceContext {
   http: Http;
@@ -235,24 +263,73 @@ export const SOURCES: SourceDef[] = [
 
 export const KURO_SIGNAL = { id: "wuthering-signal", label: "анонсы баннеров Wuthering Waves (сайт Kuro Games)", everyHours: 6 } as const;
 
+/**
+ * Меню Kuro и статьи из него: анонсы баннеров и патчноуты. Всё условными запросами;
+ * то, что уже разобрано, лежит в памяти. Сбой меню — поломка источника; сбой статьи
+ * — предупреждение: прошлые факты остаются, статья перечитывается в следующий раз.
+ */
 export async function fetchKuroAnnouncements(
   ctx: SourceContext,
-): Promise<{ ok: true; announcements: Announcement[] } | { ok: false; error: string }> {
+): Promise<{ ok: true; announcements: Announcement[]; warnings: string[] } | { ok: false; error: string }> {
   try {
+    const { memory, now } = ctx;
     const res = await conditional(ctx, KURO_MENU_URL);
-    if (res === null) return { ok: true, announcements: conveneFresh(ctx.memory.kuro, ctx.now) };
-    const r = conveneAnnouncements(JSON.parse(res.body), ctx.now);
-    if (!r.found) return { ok: false, error: "список новостей не разобрался" };
-    ctx.memory.kuro = r.announcements;
-    ctx.memory.validators[KURO_MENU_URL] = res.validators;
-    return { ok: true, announcements: r.announcements };
+    let announcements: Announcement[];
+    let patchNotes: PatchNotes[];
+    if (res === null) {
+      // Меню не менялось; списки из памяти тоже стареют.
+      announcements = memory.kuro.filter((a) => isFresh(a.publishedAt, now));
+      patchNotes = memory.kuroPatchNotes.filter((p) => isFresh(p.publishedAt, now));
+    } else {
+      const r = conveneAnnouncements(JSON.parse(res.body), now);
+      if (!r.found) return { ok: false, error: "список новостей не разобрался" };
+      announcements = r.announcements;
+      patchNotes = r.patchNotes;
+      memory.validators[KURO_MENU_URL] = res.validators;
+    }
+    memory.kuro = announcements;
+    memory.kuroPatchNotes = patchNotes;
+    return { ok: true, announcements, warnings: await readKuroArticles(ctx, announcements, patchNotes) };
   } catch (error) {
     return { ok: false, error: (error as Error).message };
   }
 }
 
-/** Анонсы из памяти тоже стареют: не старше 21 дня, как в conveneAnnouncements. */
-const conveneFresh = (list: Announcement[], now: number) => list.filter((a) => a.publishedAt >= now - 21 * 86400);
+/** Читает статьи анонсов и патчноутов, запоминает факты и забывает всё, что устарело. Возвращает предупреждения. */
+async function readKuroArticles(ctx: SourceContext, announcements: Announcement[], patchNotes: PatchNotes[]): Promise<string[]> {
+  const { memory } = ctx;
+  const ids = [...new Set([...announcements.map((a) => a.articleId), ...patchNotes.map((p) => p.articleId)])];
+  const warnings: string[] = [];
+  for (const id of ids) {
+    const url = kuroArticleJsonUrl(id);
+    try {
+      const res = await conditional(ctx, url);
+      if (res === null) continue; // не менялась — прошлый результат остаётся
+      const lines = articleText(JSON.parse(res.body));
+      if (lines === null) throw new Error("в статье нет текста");
+      if (announcements.some((a) => a.articleId === id)) memory.kuroFacts[String(id)] = kuroBannerFacts(lines);
+      for (const { version } of patchNotes.filter((p) => p.articleId === id)) {
+        const end = maintenanceEnd(lines);
+        if (end === null) delete memory.kuroReleases[version];
+        else memory.kuroReleases[version] = end;
+      }
+      memory.validators[url] = res.validators;
+    } catch (error) {
+      warnings.push(`статья Kuro ${id}: ${(error as Error).message}`);
+    }
+  }
+  const factIds = new Set(announcements.map((a) => String(a.articleId)));
+  for (const key of Object.keys(memory.kuroFacts)) if (!factIds.has(key)) delete memory.kuroFacts[key];
+  const versions = new Set(patchNotes.map((p) => p.version));
+  for (const version of Object.keys(memory.kuroReleases)) if (!versions.has(version)) delete memory.kuroReleases[version];
+  const urls = new Set(ids.map(kuroArticleJsonUrl));
+  for (const url of Object.keys(memory.validators)) if (url.startsWith(KURO_ARTICLE_JSON_DIR) && !urls.has(url)) delete memory.validators[url];
+  return warnings;
+}
+
+/** Анонсы вместе с баннерами, что разобраны из их статей и лежат в памяти. */
+export const kuroFactsFromMemory = (memory: SourceMemory, announcements: Announcement[]): AnnouncementFacts[] =>
+  announcements.map((announcement) => ({ announcement, banners: memory.kuroFacts[String(announcement.articleId)] ?? [] }));
 
 /** Начала всех баннеров Wuthering Waves, которые фандом уже знает (в том числе закончившихся). */
 export function wuwaKnownStarts(memory: SourceMemory): number[] {

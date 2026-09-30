@@ -4,6 +4,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { Failure } from "./issues.ts";
+import { KURO_MENU_URL, isKuroUrl } from "./sources/kuro.ts";
 import { emptyMemory, type SourceMemory } from "./sources/registry.ts";
 import type { HubData, Item, SourceRun } from "./types.ts";
 
@@ -56,12 +57,34 @@ function looksLikeState(value: unknown): value is State {
   if (!(value.published === null || looksLikeHub(value.published))) return false;
   const memory = value.memory;
   if (!isRecord(memory)) return false;
-  return isRecord(memory.revisions) && isRecord(memory.pages) && isRecord(memory.validators) && Array.isArray(memory.kuro);
+  return (
+    isRecord(memory.revisions) &&
+    isRecord(memory.pages) &&
+    isRecord(memory.validators) &&
+    Array.isArray(memory.kuro) &&
+    Array.isArray(memory.kuroPatchNotes) &&
+    isRecord(memory.kuroFacts) &&
+    isRecord(memory.kuroReleases)
+  );
+}
+
+/**
+ * Файл состояния прошлой версии не знает про факты Kuro: им даются пустые умолчания.
+ * Метки версий меню при этом забываются — иначе меню ответило бы 304, и патчноуты с
+ * анонсами не читались бы до следующей новости.
+ */
+function upgradeMemory(memory: Record<string, unknown>): void {
+  if (memory.kuroFacts !== undefined && memory.kuroReleases !== undefined && memory.kuroPatchNotes !== undefined) return;
+  memory.kuroFacts ??= {};
+  memory.kuroReleases ??= {};
+  memory.kuroPatchNotes ??= [];
+  if (isRecord(memory.validators)) delete memory.validators[KURO_MENU_URL];
 }
 
 export function loadState(path = STATE_FILE): State | null {
   try {
     const raw: unknown = JSON.parse(readFileSync(path, "utf8"));
+    if (isRecord(raw) && isRecord(raw.memory)) upgradeMemory(raw.memory);
     return looksLikeState(raw) ? raw : null;
   } catch {
     return null;
@@ -107,12 +130,13 @@ export function pruneState(state: State, knownIds: ReadonlySet<string>): string[
   return [...removed].sort();
 }
 
-/** Прошлые данные из выложенного файла без записей владельца: они вернутся из overrides.json. */
+/** Прошлые данные из выложенного файла без записей владельца (они вернутся из overrides.json) и без баннеров Kuro. */
 export function baseFromPublished(hub: HubData): HubData {
   return {
     ...hub,
     codes: hub.codes.filter((c) => c.source !== null),
-    banners: hub.banners.filter((b) => b.url !== null),
+    // Баннеры Kuro пересчитываются из памяти каждый прогон и в основу не попадают.
+    banners: hub.banners.filter((b) => b.url !== null && !isKuroUrl(b.url)),
   };
 }
 

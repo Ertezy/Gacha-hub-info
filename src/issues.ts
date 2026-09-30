@@ -122,15 +122,15 @@ export function planIssues(input: IssueInputs): IssueAction[] {
   const signalKey = input.wuwaSignal ? `wuwa-signal:${input.wuwaSignal.articleId}` : null;
   for (const [key, number] of openByKey) {
     if (key.startsWith("wuwa-signal:") && key !== signalKey) {
-      actions.push({ type: "close", number, comment: "Фандом узнал о баннере или вышел новый анонс, задача закрыта." });
+      actions.push({ type: "close", number, comment: "Баннер теперь в панели (фандом узнал о нём или сборщик разобрал анонс) либо вышел новый анонс, задача закрыта." });
     }
   }
   if (input.wuwaSignal && signalKey) {
     keep(
       signalKey,
       true,
-      "Новый баннер Wuthering Waves: фандом его ещё не знает",
-      `Kuro Games опубликовала анонс баннеров: ${input.wuwaSignal.url} (${formatTime(input.wuwaSignal.publishedAt)}).\n\nФандом этого цикла ещё не знает, поэтому в панели его нет. Впиши баннер в overrides.json — пример в README. Когда фандом создаст страницу, данные перейдут на неё, и задача закроется сама.`,
+      "Анонс баннера Wuthering Waves не разобрался",
+      `Kuro Games опубликовала анонс баннеров: ${input.wuwaSignal.url} (${formatTime(input.wuwaSignal.publishedAt)}).\n\nСборщик не смог прочитать из него название и сроки, поэтому в панели этого цикла нет. Впиши баннер в overrides.json — пример в README. Когда фандом создаст страницу, данные перейдут на неё, и задача закроется сама.`,
       "",
     );
   }

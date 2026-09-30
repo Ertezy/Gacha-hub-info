@@ -75,7 +75,12 @@ test("сигнал о баннере: открыть, сменить на нов
   const signal = (id: number) => ({ articleId: id, publishedAt: NOW - 86400, url: `https://wutheringwaves.kurogames.com/en/main/news/detail/${id}` });
   const opened = planIssues(base({ wuwaSignal: signal(5431) }));
   assert.equal(opened[0]?.type === "open" ? keyOf(opened[0].body) : null, "wuwa-signal:5431");
-  if (opened[0]?.type === "open") assert.match(opened[0].body, /news\/detail\/5431/);
+  if (opened[0]?.type === "open") {
+    assert.equal(opened[0].title, "Анонс баннера Wuthering Waves не разобрался");
+    assert.match(opened[0].body, /news\/detail\/5431/);
+    assert.match(opened[0].body, /Сборщик не смог прочитать из него название и сроки/);
+    assert.doesNotMatch(opened[0].body, /Фандом этого цикла ещё не знает/);
+  }
   const moved = planIssues(base({ wuwaSignal: signal(5500), open: [{ number: 11, key: "wuwa-signal:5431" }] }));
   assert.deepEqual(moved.map((a) => a.type).sort(), ["close", "open"]);
   const gone = planIssues(base({ open: [{ number: 11, key: "wuwa-signal:5431" }] }));
