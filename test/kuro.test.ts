@@ -403,6 +403,33 @@ test("сигнал: оружейный анонс самым свежим не �
   assert.equal(unreadableAnnouncement(announcements, { "9301": [] }, NOW)?.articleId, 9301, "а пустой анонс баннеров остаётся сигналом");
 });
 
+test("сигнал: баннер, вписанный владельцем (начало не раньше выхода анонса минус 2 суток), сигнал гасит", () => {
+  const empty = { "9401": [], "9402": [] };
+  const published = T_NEW.publishedAt;
+  assert.equal(unreadableAnnouncement([T_OLD, T_NEW], empty, NOW, [])?.articleId, 9402, "правок нет — сигнал остаётся");
+  assert.equal(unreadableAnnouncement([T_OLD, T_NEW], empty, NOW, [published]), null, "начало в момент выхода анонса");
+  assert.equal(unreadableAnnouncement([T_OLD, T_NEW], empty, NOW, [published + 5 * 86400]), null, "начало через несколько дней после выхода");
+  assert.equal(unreadableAnnouncement([T_OLD, T_NEW], empty, NOW, [published - 2 * 86400]), null, "ровно за 2 суток до выхода — ещё считается");
+  assert.equal(unreadableAnnouncement([T_OLD, T_NEW], empty, NOW, [published - 2 * 86400 - 1])?.articleId, 9402, "на секунду раньше — уже баннер прошлого цикла");
+  assert.equal(unreadableAnnouncement([T_OLD, T_NEW], empty, NOW, [published - 30 * 86400, published - 20 * 86400])?.articleId, 9402, "старые баннеры сигнал не гасят");
+  assert.equal(unreadableAnnouncement([T_OLD, T_NEW], empty, NOW, [published - 30 * 86400, published + 86400]), null, "хватает одного подходящего");
+});
+
+test("сигнал: правка сверяется с самым свежим анонсом, а не со старым, и гасит всех «близнецов»", () => {
+  const empty = { "9401": [], "9402": [] };
+  // Начало на 3,5 суток раньше самого свежего анонса: для старого (9401, на 2 суток раньше) оно было бы «своим».
+  assert.equal(unreadableAnnouncement([T_OLD, T_NEW], empty, NOW, [T_NEW.publishedAt - 3.5 * 86400])?.articleId, 9402);
+  const twin = announcement(9404, T_NEW.publishedAt);
+  const twins = { "9402": [], "9404": [] };
+  assert.equal(unreadableAnnouncement([T_NEW, twin], twins, NOW, [])?.articleId, 9404);
+  assert.equal(unreadableAnnouncement([T_NEW, twin], twins, NOW, [T_NEW.publishedAt]), null);
+});
+
+test("сигнал: правка ничего не меняет, когда сигнала и так нет", () => {
+  assert.equal(unreadableAnnouncement([], {}, NOW, [NOW]), null);
+  assert.equal(unreadableAnnouncement([T_OLD, T_NEW], { "9402": [RELEASE_FACT] }, NOW, [NOW]), null);
+});
+
 test("баннер фандома с другими кавычками и пробелами в названии — тот же баннер", () => {
   const start = utc(2026, 10, 1, 3, 0);
   const kuro = wuwa("Solo’s “Test”  Banner", start, { url: kuroArticleUrl(9001) });

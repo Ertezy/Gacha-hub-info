@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import type { Http, HttpResponse } from "../src/http.ts";
 import { fandom } from "../src/mediawiki.ts";
 import { GAME_IDS } from "../src/types.ts";
-import { KURO_MENU_URL, kuroArticleUrl, kuroBanners, unreadableAnnouncement, type KuroBannerFact } from "../src/sources/kuro.ts";
+import { bannerStarts, parseOverrides } from "../src/overrides.ts";
+import { KURO_MENU_URL, kuroArticleJsonUrl, kuroArticleUrl, kuroBanners, unreadableAnnouncement, type KuroBannerFact } from "../src/sources/kuro.ts";
 import { KURO_SIGNAL, SOURCES, emptyMemory, fetchKuroAnnouncements, kuroFactsFromMemory } from "../src/sources/registry.ts";
 
 type Route = (url: URL) => HttpResponse | undefined;
@@ -351,19 +352,6 @@ test("анонсы Kuro: новая статья, которая не откры
   assert.deepEqual(memory.kuroFacts, { "9001": [FACT] });
 });
 
-test("анонсы Kuro: статья без articleContent — предупреждение, а метки версии не запоминаются", async () => {
-  const k = kuroSite();
-  const memory = emptyMemory();
-  const http: Http = {
-    get: (url, validators) =>
-      url.endsWith(articlePath(9001)) ? Promise.resolve(json({ articleId: 9001, message: "oops" }, '"x"')) : k.http.get(url, validators),
-  };
-  const result = await fetchKuroAnnouncements({ http, now: NOW, memory });
-  assert.equal(result.ok && result.warnings.length, 1);
-  assert.equal(Object.keys(memory.validators).some((key) => key.endsWith(articlePath(9001))), false);
-  assert.deepEqual(memory.kuroFacts, {});
-});
-
 test("анонсы Kuro: устаревшее и закончившееся забывается вместе с метками версий, статьи не запрашиваются", async () => {
   const k = kuroSite();
   const memory = emptyMemory();
@@ -576,4 +564,89 @@ test("анонсы Kuro: два патчноута одной версии — �
   const fresh = emptyMemory();
   await fetchKuroAnnouncements({ http: other.http, now: NOW, memory: fresh });
   assert.deepEqual(fresh.kuroReleases, { "9.9": RELEASE_END });
+});
+
+/** Сайт Kuro, у которого выбранные статьи отвечают заданным ответом (когда он задан), а остальное — как обычно. */
+function kuroSiteWith(replies: Map<number, HttpResponse>) {
+  const k = kuroSite();
+  const http: Http = {
+    get(url, validators) {
+      const id = Number(/\/article\/(\d+)\.json$/.exec(url)?.[1]);
+      const reply = replies.get(id);
+      return reply ? Promise.resolve(reply) : k.http.get(url, validators);
+    },
+  };
+  return { ...k, http };
+}
+
+test("анонсы Kuro: ответ 200 без текста статьи — прочитана без баннеров, предупреждение есть, сигнал есть", async () => {
+  const bodies: unknown[] = [{ articleId: 9001, message: "oops" }, null, [], "text", 42, { articleContent: 42 }, { articleContent: null }];
+  for (const body of bodies) {
+    const k = kuroSiteWith(new Map([[9001, json(body, '"x"')]]));
+    const memory = emptyMemory();
+    const result = await fetchKuroAnnouncements({ http: k.http, now: NOW, memory });
+    const label = JSON.stringify(body);
+    assert.equal(result.ok && result.warnings.length, 1, label);
+    assert.match(result.ok ? result.warnings[0]! : "", /9001/, label);
+    assert.deepEqual(memory.kuroFacts, { "9001": [] }, label);
+    assert.equal(unreadable(memory), 9001, label);
+    assert.deepEqual(memory.kuroReleases, { "9.9": RELEASE_END }, "патчноут читается как обычно");
+    assert.deepEqual(memory.validators[kuroArticleJsonUrl(9001)], { etag: '"x"' }, "ответ прочитан — его метки запомнены");
+  }
+});
+
+test("анонсы Kuro: ответ 200 без текста заменяет прошлые факты; когда статья снова с текстом, факты возвращаются", async () => {
+  const replies = new Map<number, HttpResponse>();
+  const k = kuroSiteWith(replies);
+  const memory = emptyMemory();
+  await fetchKuroAnnouncements({ http: k.http, now: NOW, memory });
+  assert.deepEqual(memory.kuroFacts, { "9001": [FACT] });
+  assert.equal(unreadable(memory), null);
+  replies.set(9001, json({ articleId: 9001 }, '"g1"'));
+  await fetchKuroAnnouncements({ http: k.http, now: NOW, memory });
+  assert.deepEqual(memory.kuroFacts, { "9001": [] });
+  assert.equal(unreadable(memory), 9001);
+  replies.delete(9001); // на запрос с метками пустого ответа сайт отвечает 200 с прежней статьёй
+  await fetchKuroAnnouncements({ http: k.http, now: NOW, memory });
+  assert.deepEqual(memory.kuroFacts, { "9001": [FACT] });
+  assert.equal(unreadable(memory), null);
+});
+
+test("анонсы Kuro: патчноут без текста — предупреждение, срок версии остаётся, фактов у него нет", async () => {
+  const k = kuroSiteWith(new Map([[9101, json({ articleId: 9101 }, '"x"')]]));
+  const memory = emptyMemory();
+  memory.kuroReleases["9.9"] = 5;
+  const result = await fetchKuroAnnouncements({ http: k.http, now: NOW, memory });
+  assert.equal(result.ok && result.warnings.length, 1);
+  assert.deepEqual(memory.kuroReleases, { "9.9": 5 });
+  assert.deepEqual(memory.kuroFacts, { "9001": [FACT] }, "анонс прочитан как обычно, ключа для патчноута нет");
+  assert.equal(unreadable(memory), null);
+});
+
+test("анонсы Kuro: ответ 200, но не JSON, и сбой сети — статья не прочитана: ключа нет, сигнала нет, метки не меняются", async () => {
+  const notJson: HttpResponse = { status: 200, body: "<html>maintenance</html>", validators: { etag: '"h"' } };
+  const k = kuroSiteWith(new Map([[9001, notJson]]));
+  const memory = emptyMemory();
+  const result = await fetchKuroAnnouncements({ http: k.http, now: NOW, memory });
+  assert.equal(result.ok && result.warnings.length, 1);
+  assert.deepEqual(memory.kuroFacts, {});
+  assert.equal(memory.validators[kuroArticleJsonUrl(9001)], undefined);
+  assert.equal(unreadable(memory), null);
+});
+
+test("анонсы Kuro: вписанный в overrides.json баннер гасит сигнал, в том числе для ответа 200 без текста", async () => {
+  const k = kuroSiteWith(new Map([[9001, json({ articleId: 9001 }, '"x"')]]));
+  const memory = emptyMemory();
+  await fetchKuroAnnouncements({ http: k.http, now: NOW, memory });
+  assert.equal(unreadable(memory), 9001);
+  const overrides = (starts: string) => {
+    const r = parseOverrides({ banners: [{ game: "wuthering", title: "By Hand", starts, ends: "2026-10-22 10:59 UTC+1" }] });
+    assert.ok(r.ok);
+    return r.ok ? r.overrides : { codes: [], banners: [], hide: [] };
+  };
+  const signal = (o: ReturnType<typeof overrides>) => unreadableAnnouncement(memory.kuro, memory.kuroFacts, NOW, bannerStarts(o, "wuthering"))?.articleId ?? null;
+  // Анонс 9001 вышел 15 сентября в 11:15 по UTC+8.
+  assert.equal(signal(overrides("2026-10-01 10:00 UTC+1")), null, "начало вписанного баннера позже выхода анонса");
+  assert.equal(signal(overrides("2026-09-13 04:15 UTC+1")), null, "ровно за 2 суток до выхода");
+  assert.equal(signal(overrides("2026-09-13 04:14 UTC+1")), 9001, "минутой раньше — это уже другой баннер");
 });

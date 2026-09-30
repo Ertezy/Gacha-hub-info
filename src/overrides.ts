@@ -111,6 +111,13 @@ export function parseOverrides(json: unknown): { ok: true; overrides: Overrides 
   return errors.length > 0 ? { ok: false, errors } : { ok: true, overrides };
 }
 
+/** Начала баннеров игры, вписанных в файл правок (в unix-секундах). */
+export const bannerStarts = (overrides: Overrides, game: GameId): number[] =>
+  overrides.banners.flatMap((o) => {
+    const starts = o.game === game ? parseMoment(o.starts) : null;
+    return starts === null ? [] : [starts];
+  });
+
 const same = (a: string, b: string) => a.trim().toUpperCase() === b.trim().toUpperCase();
 
 export function applyOverrides(hub: HubData, overrides: Overrides, now: number): HubData {

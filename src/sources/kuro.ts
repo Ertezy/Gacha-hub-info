@@ -4,7 +4,8 @@
 // статей, ни картинок здесь нет. Источник убирается при первой просьбе Kuro
 // (спека §6.2, §7, поправка от 30 сентября 2026). Номер статьи и время её
 // публикации дополнительно служат сигналом владельцу: если самый свежий анонс
-// баннера персонажа прочитан, а баннера из него не вышло, сборщик открывает задачу.
+// баннера персонажа прочитан, а баннера из него не вышло (и владелец не вписал его
+// в overrides.json), сборщик открывает задачу.
 
 import { atOffset, EUROPE_SERVER_OFFSET_MINUTES, parseIsoLike } from "../time.ts";
 import { GAME_IDS, type Banner, type HubData } from "../types.ts";
@@ -76,22 +77,30 @@ export function conveneAnnouncements(
   return { found: true, announcements, patchNotes };
 }
 
+/** Баннер, вписанный владельцем, начинается не раньше чем за 2 суток до выхода анонса — значит, он про этот анонс. */
+const MANUAL_BANNER_SECONDS = 2 * 86400;
+
 /**
  * Сигнал владельцу: самый свежий анонс баннера персонажа, статья которого прочитана,
  * но баннеров в ней не нашлось. Решается по запомненным фактам (`facts` — по номеру
  * статьи строкой): ключа нет — статью ещё не удалось прочитать (сбой сети, статус
- * не 200), и это не повод для задачи; пустой список — прочитана, баннеров нет.
- * Учитываются только свежие анонсы (не старше 21 дня); оружейные в список не попадают.
- * Если несколько анонсов вышли в одну секунду, «самыми свежими» считаются все они.
+ * не 200), и это не повод для задачи; пустой список — прочитана (в том числе ответ 200
+ * без текста статьи), баннеров нет. Учитываются только свежие анонсы (не старше
+ * 21 дня); оружейные в список не попадают. Если несколько анонсов вышли в одну секунду,
+ * «самыми свежими» считаются все они. Владелец уже вписал баннер вручную, если у
+ * какого-то баннера из overrides.json (`manualStarts` — его начала) начало не раньше
+ * времени выхода самого свежего анонса минус 2 суток: тогда сигнала нет и задача закроется.
  */
 export function unreadableAnnouncement(
   announcements: Announcement[],
   facts: Record<string, KuroBannerFact[]>,
   now: number,
+  manualStarts: readonly number[] = [],
 ): Announcement | null {
   const fresh = announcements.filter((a) => isFresh(a.publishedAt, now));
   if (fresh.length === 0) return null;
   const latest = Math.max(...fresh.map((a) => a.publishedAt));
+  if (manualStarts.some((start) => start >= latest - MANUAL_BANNER_SECONDS)) return null;
   const empty = fresh.filter((a) => a.publishedAt === latest && facts[String(a.articleId)]?.length === 0);
   return empty.sort((a, b) => b.articleId - a.articleId)[0] ?? null;
 }

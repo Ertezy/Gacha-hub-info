@@ -80,11 +80,13 @@ test("сигнал о баннере: открыть, сменить на нов
     assert.match(opened[0].body, /news\/detail\/5431/);
     assert.match(opened[0].body, /не смог прочитать из неё название и сроки баннера персонажа/);
     assert.doesNotMatch(opened[0].body, /Фандом этого цикла ещё не знает/);
+    assert.match(opened[0].body, /закроется на следующем прогоне после того, как в overrides\.json появится баннер/);
   }
   const moved = planIssues(base({ wuwaSignal: signal(5500), open: [{ number: 11, key: "wuwa-signal:5431" }] }));
   assert.deepEqual(moved.map((a) => a.type).sort(), ["close", "open"]);
   const gone = planIssues(base({ open: [{ number: 11, key: "wuwa-signal:5431" }] }));
   assert.deepEqual(gone.map((a) => a.type), ["close"]);
+  if (gone[0]?.type === "close") assert.match(gone[0].comment, /баннер вписан в overrides\.json/);
 });
 
 test("чужие открытые задачи не трогаются", () => {

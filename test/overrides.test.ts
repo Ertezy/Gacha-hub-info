@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { applyOverrides, parseMoment, parseOverrides } from "../src/overrides.ts";
+import { applyOverrides, bannerStarts, parseMoment, parseOverrides } from "../src/overrides.ts";
 import type { Banner, Code, HubData } from "../src/types.ts";
 
 const utc = (y: number, mo: number, d: number, h: number, mi: number, s = 0) => Date.UTC(y, mo - 1, d, h, mi, s) / 1000;
@@ -101,4 +101,22 @@ test("верхний уровень: неправильный тип поля", 
   if (r.ok) return;
   assert.equal(r.errors.length, 1);
   assert.match(r.errors[0]!, /^codes:/);
+});
+
+test("начала баннеров игры из файла правок: чужие игры и коды не в счёт", () => {
+  const parsed = parseOverrides({
+    banners: [
+      { game: "wuthering", title: "First", starts: "2026-09-10 10:00 UTC+1", ends: "2026-09-29 11:59 UTC+1" },
+      { game: "hsr", title: "Other Game", starts: "2026-09-11 10:00 UTC+8", ends: "2026-09-30 11:59 UTC+8" },
+      { game: "wuthering", title: "Second", starts: "2026-10-01 12:00 UTC+8", ends: "2026-10-20 11:59 UTC+8" },
+    ],
+    codes: [{ game: "wuthering", code: "ABCD1234" }],
+    hide: [{ game: "wuthering", banner: "Hidden" }],
+  });
+  assert.ok(parsed.ok);
+  if (!parsed.ok) return;
+  assert.deepEqual(bannerStarts(parsed.overrides, "wuthering"), [utc(2026, 9, 10, 9, 0), utc(2026, 10, 1, 4, 0)]);
+  assert.deepEqual(bannerStarts(parsed.overrides, "hsr"), [utc(2026, 9, 11, 2, 0)]);
+  assert.deepEqual(bannerStarts(parsed.overrides, "genshin"), []);
+  assert.deepEqual(bannerStarts({ codes: [], banners: [], hide: [] }, "wuthering"), []);
 });

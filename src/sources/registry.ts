@@ -271,7 +271,8 @@ export const KURO_SIGNAL = { id: "wuthering-signal", label: "анонсы бан
 /**
  * Меню Kuro и статьи из него: анонсы баннеров и патчноуты. Всё условными запросами;
  * то, что уже разобрано, лежит в памяти. Сбой меню — поломка источника; сбой статьи
- * — предупреждение: прошлые факты остаются, статья перечитывается в следующий раз.
+ * (сеть, статус не 200, не JSON) — предупреждение: прошлые факты остаются, статья перечитывается
+ * в следующий раз. Ответ 200 без текста статьи — другое дело: статья считается прочитанной без баннеров.
  * Окно в 21 день ограничивает, какие анонсы читаются и берутся для сигнала (это
  * `announcements` в ответе); в памяти (`memory.kuro`) анонс остаётся, пока идёт хотя
  * бы один его баннер.
@@ -317,10 +318,14 @@ async function readKuroArticles(ctx: SourceContext, announcements: Announcement[
       const res = await conditional(ctx, url);
       if (res === null) continue; // не менялась — прошлый результат остаётся
       const article: unknown = JSON.parse(res.body);
-      const lines = articleText(article);
-      if (lines === null) throw new Error("в статье нет текста");
+      // Ответ 200 без текста статьи (не объект, нет articleContent или он не строка) — статья прочитана, баннеров
+      // в ней нет: так смена формата JSON не остаётся незамеченной, а по свежему анонсу открывается задача.
+      const text = articleText(article);
+      if (text === null) warnings.push(`статья Kuro ${id}: в ответе нет текста статьи — считается прочитанной без баннеров`);
+      const lines = text ?? [];
       // Ключ в kuroFacts появляется, только когда статья прочитана; пустой список — баннеров в ней не нашлось.
-      // Статья, которую не удалось открыть, ключа не получает (и не даёт сигнала), а прошлые факты остаются.
+      // Статья, которую не удалось открыть (сеть, статус не 200, не JSON), ключа не получает (и не даёт сигнала),
+      // а прошлые факты остаются.
       if (announcements.some((a) => a.articleId === id)) memory.kuroFacts[String(id)] = kuroBannerFacts(lines, articleTitle(article));
       const end = maintenanceEnd(lines);
       for (const { version } of patchNotes.filter((p) => p.articleId === id)) {

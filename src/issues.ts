@@ -122,7 +122,7 @@ export function planIssues(input: IssueInputs): IssueAction[] {
   const signalKey = input.wuwaSignal ? `wuwa-signal:${input.wuwaSignal.articleId}` : null;
   for (const [key, number] of openByKey) {
     if (key.startsWith("wuwa-signal:") && key !== signalKey) {
-      actions.push({ type: "close", number, comment: "Сборщик разобрал анонс, вышел более новый анонс или этому анонсу исполнился 21 день — задача закрыта." });
+      actions.push({ type: "close", number, comment: "Сборщик разобрал анонс, баннер вписан в overrides.json, вышел более новый анонс или этому анонсу исполнился 21 день — задача закрыта." });
     }
   }
   if (input.wuwaSignal && signalKey) {
@@ -130,7 +130,7 @@ export function planIssues(input: IssueInputs): IssueAction[] {
       signalKey,
       true,
       "Анонс баннера Wuthering Waves не разобрался",
-      `Kuro Games опубликовала анонс баннеров: ${input.wuwaSignal.url} (${formatTime(input.wuwaSignal.publishedAt)}).\n\nСборщик открыл статью, но не смог прочитать из неё название и сроки баннера персонажа, поэтому в панели этого цикла нет. Впиши баннер в overrides.json — пример в README. Когда фандом создаст страницу, в панель пойдёт запись оттуда. Сама задача закроется, когда сборщик сможет разобрать анонс, выйдет более новый анонс или этому анонсу исполнится 21 день.`,
+      `Kuro Games опубликовала анонс баннеров: ${input.wuwaSignal.url} (${formatTime(input.wuwaSignal.publishedAt)}).\n\nСборщик открыл статью, но не смог прочитать из неё название и сроки баннера персонажа, поэтому в панели этого цикла нет. Впиши баннер в overrides.json — пример в README. Когда фандом создаст страницу, в панель пойдёт запись оттуда. Задача закроется на следующем прогоне после того, как в overrides.json появится баннер Wuthering Waves, начало которого не раньше чем за двое суток до выхода анонса. Сама она закроется и когда сборщик сможет разобрать анонс, выйдет более новый анонс или этому анонсу исполнится 21 день.`,
       "",
     );
   }

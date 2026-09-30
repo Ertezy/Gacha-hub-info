@@ -4,7 +4,7 @@ import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { createHttp, StatusError } from "./http.ts";
 import { applyIssueActions, createGitHub, planIssues } from "./issues.ts";
 import { mergeHub, sameData, sectionKey } from "./merge.ts";
-import { applyOverrides, parseOverrides, type Overrides } from "./overrides.ts";
+import { applyOverrides, bannerStarts, parseOverrides, type Overrides } from "./overrides.ts";
 import { kuroBanners, unreadableAnnouncement, withKuroBanners } from "./sources/kuro.ts";
 import { KURO_SIGNAL, SOURCES, fetchKuroAnnouncements, kuroFactsFromMemory } from "./sources/registry.ts";
 import {
@@ -156,7 +156,8 @@ validationErrors.push(...missingPrevious(runs, hadPrevious));
 
 // Задача владельцу — когда самый свежий анонс баннера персонажа прочитан, а баннера из него не вышло.
 // Решается по запомненным фактам; статья, которую не удалось открыть, сигнала не даёт.
-const wuwaSignal = unreadableAnnouncement(memory.kuro, memory.kuroFacts, now);
+// Баннер Wuthering Waves, уже вписанный в overrides.json, сигнал гасит: задача закроется.
+const wuwaSignal = unreadableAnnouncement(memory.kuro, memory.kuroFacts, now, bannerStarts(overrides, "wuthering"));
 
 const changed = !sameData(state.published, hub);
 const stale = state.lastPublishedAt === null || now - state.lastPublishedAt >= REPUBLISH_SECONDS - SLACK_SECONDS;
