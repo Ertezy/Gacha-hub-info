@@ -78,7 +78,7 @@ test("сигнал о баннере: открыть, сменить на нов
   if (opened[0]?.type === "open") {
     assert.equal(opened[0].title, "Анонс баннера Wuthering Waves не разобрался");
     assert.match(opened[0].body, /news\/detail\/5431/);
-    assert.match(opened[0].body, /Сборщик не смог прочитать из него название и сроки/);
+    assert.match(opened[0].body, /не смог прочитать из неё название и сроки баннера персонажа/);
     assert.doesNotMatch(opened[0].body, /Фандом этого цикла ещё не знает/);
   }
   const moved = planIssues(base({ wuwaSignal: signal(5500), open: [{ number: 11, key: "wuwa-signal:5431" }] }));

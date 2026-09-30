@@ -2,13 +2,15 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   articleText,
+  articleTitle,
   conveneAnnouncements,
+  isWeaponOnly,
   kuroArticleUrl,
   kuroBannerFacts,
   kuroBanners,
   maintenanceEnd,
   patchNotesVersion,
-  unknownToWiki,
+  unreadableAnnouncement,
   withKuroBanners,
   type Announcement,
   type KuroBannerFact,
@@ -18,20 +20,21 @@ import type { Banner, HubData } from "../src/types.ts";
 const utc = (y: number, mo: number, d: number, h: number, mi: number) => Date.UTC(y, mo - 1, d, h, mi) / 1000;
 const NOW = utc(2026, 9, 15, 12, 0);
 
+// Меню целиком придумано: номера, названия и даты.
 const MENU = [
-  { articleId: 758, articleTitle: "Convene Details", startTime: "2024-05-23 10:00:00" },
-  { articleId: 5437, articleTitle: "Resonator Review | Astral Mapping", startTime: "2026-09-09 18:00:00" },
-  { articleId: 5431, articleTitle: "[Version 3.6 Featured Resonator/Weapon Convene: Phase II]", startTime: "2026-09-09 11:15:00" },
-  { articleId: 5332, articleTitle: "[Glint of Clouds] Featured Weapon Convene", startTime: "2026-08-19 14:50:38" },
-  { articleId: 4100, articleTitle: "[Old] Featured Resonator Convene", startTime: "2026-06-01 10:00:00" },
+  { articleId: 9200, articleTitle: "Convene Details", startTime: "2024-05-23 10:00:00" },
+  { articleId: 9201, articleTitle: "Resonator Review | Test", startTime: "2026-09-09 18:00:00" },
+  { articleId: 9202, articleTitle: "[Version 9.9 Featured Resonator/Weapon Convene: Phase II]", startTime: "2026-09-09 11:15:00" },
+  { articleId: 9203, articleTitle: "[Test Weapon] Featured Weapon Convene", startTime: "2026-09-12 14:50:38" },
+  { articleId: 9204, articleTitle: "[Old] Featured Resonator Convene", startTime: "2026-06-01 10:00:00" },
 ];
 
-test("анонсы: только Convene, без справки, не старше 21 дня, время UTC+8", () => {
+test("анонсы: только Convene, без справки и оружейных, не старше 21 дня, время UTC+8", () => {
   const r = conveneAnnouncements(MENU, NOW);
   assert.equal(r.found, true);
-  // 5332 опубликована 19 августа — это 27 дней назад, старше 21 дня.
+  // 9203 — только про оружие, 9204 опубликована 1 июня — старше 21 дня, 9200 — справка.
   assert.deepEqual(r.announcements, [
-    { articleId: 5431, publishedAt: utc(2026, 9, 9, 3, 15), url: kuroArticleUrl(5431) },
+    { articleId: 9202, publishedAt: utc(2026, 9, 9, 3, 15), url: kuroArticleUrl(9202) },
   ]);
 });
 
@@ -39,24 +42,14 @@ test("не массив — not found", () => {
   assert.equal(conveneAnnouncements({ error: 1 }, NOW).found, false);
 });
 
-test("сигнал, пока фандом не знает цикла; пропадает, когда узнал", () => {
-  const { announcements } = conveneAnnouncements(MENU, NOW);
-  const augustStart = utc(2026, 8, 20, 9, 0);
-  const septemberStart = utc(2026, 9, 10, 9, 0);
-  assert.equal(unknownToWiki(announcements, [augustStart])?.articleId, 5431);
-  assert.equal(unknownToWiki(announcements, [augustStart, septemberStart]), null);
-  assert.equal(unknownToWiki([], [augustStart]), null);
-  assert.equal(unknownToWiki(announcements, [])?.articleId, 5431);
-});
-
 test("список с null и другим мусором не роняет разбор", () => {
   const r = conveneAnnouncements(
-    [null, 42, "x", { articleId: 5431, articleTitle: "[Version 3.6 Featured Resonator/Weapon Convene: Phase II]", startTime: "2026-09-09 11:15:00" }],
+    [null, 42, "x", { articleId: 9202, articleTitle: "[Version 9.9 Featured Resonator/Weapon Convene: Phase II]", startTime: "2026-09-09 11:15:00" }],
     NOW
   );
   assert.equal(r.found, true);
   assert.equal(r.announcements.length, 1);
-  assert.equal(r.announcements[0]?.articleId, 5431);
+  assert.equal(r.announcements[0]?.articleId, 9202);
 });
 
 // Синтетическая статья: имена и даты придуманы, от настоящих анонсов взяты только служебные фразы.
@@ -178,6 +171,18 @@ test("версия патчноута берётся только из заго�
   assert.equal(patchNotesVersion("Patch Notes for Wuthering Waves Version 9.9: Something"), "9.9");
   assert.equal(patchNotesVersion("[Version 9.9 Featured Resonator/Weapon Convene: Phase I]"), null);
   assert.equal(patchNotesVersion("Patch Notes without a number"), null);
+});
+
+test("версия патчноута: 9.9.1 — другая версия, а не 9.9; знак препинания после версии не мешает", () => {
+  assert.equal(patchNotesVersion("Patch Notes for Wuthering Waves Version 9.9.1: Synthetic Hotfix"), null);
+  assert.equal(patchNotesVersion("Patch Notes for Version 9.9.12"), null);
+  assert.equal(patchNotesVersion("Patch Notes for Wuthering Waves Version 9.9: Synthetic Title"), "9.9");
+  assert.equal(patchNotesVersion("Patch Notes for Version 9.9."), "9.9");
+  assert.equal(patchNotesVersion("Patch Notes for Version 9.10 Synthetic"), "9.10");
+  const menu = [
+    { articleId: 9110, articleTitle: "Patch Notes for Wuthering Waves Version 9.9.1: Synthetic Hotfix", startTime: "2026-09-13 12:00:00" },
+  ];
+  assert.deepEqual(conveneAnnouncements(menu, NOW).patchNotes, [], "патчноут 9.9.1 в список не попадает");
 });
 
 // Меню с патчноутами: названия и номера придуманы.
@@ -311,4 +316,98 @@ test("один и тот же баннер из двух анонсов Kuro д�
   const result = withKuroBanners(hubOf([]), kuro);
   assert.equal(result.banners.length, 1);
   assert.equal(result.banners[0]?.url, kuroArticleUrl(9002), "побеждает более новый анонс (первый в списке)");
+});
+
+// Одиночный баннер: строки «[Название] Featured Resonator Convene» в теле нет, она только в названии статьи.
+const SOLO_LINES = articleText({
+  articleContent:
+    "<p>During the event, 5-Star Resonator: Solo Resonator, 4-Star Resonators: B, C receive boosted drop rates!</p>" +
+    "<p>&#10022;Duration&#10022;</p><p>2026-10-22 10:00 - 2026-11-11 11:59 (server time)</p>",
+})!;
+const SOLO_FACT: KuroBannerFact = {
+  title: "Solo Banner",
+  featured: "Solo Resonator",
+  start: { kind: "at", at: utc(2026, 10, 22, 9, 0) },
+  endsAt: utc(2026, 11, 11, 10, 59),
+};
+
+test("одиночный баннер: без строки заголовка в теле баннер берётся по названию статьи", () => {
+  assert.deepEqual(kuroBannerFacts(SOLO_LINES, "[Solo Banner] Featured Resonator Convene"), [SOLO_FACT]);
+  assert.deepEqual(kuroBannerFacts(SOLO_LINES, "  [Solo Banner]   Featured Resonator Convene "), [SOLO_FACT]);
+  assert.deepEqual(kuroBannerFacts(SOLO_LINES), [], "названия нет");
+  assert.deepEqual(kuroBannerFacts(SOLO_LINES, null), []);
+  assert.deepEqual(kuroBannerFacts(SOLO_LINES, "[Version 9.9 Featured Resonator/Weapon Convene: Phase I]"), [], "название не одиночного баннера");
+  assert.deepEqual(kuroBannerFacts(SOLO_LINES, "[Solo Banner] Featured Weapon Convene"), [], "название оружейного анонса");
+  assert.deepEqual(kuroBannerFacts(SOLO_LINES, "Resonator Review | Test"), []);
+});
+
+test("одиночный баннер: блок кончается на первом оружейном заголовке, а название не мешает статье со своими заголовками", () => {
+  const withWeapon = [
+    ...SOLO_LINES,
+    "[Test Weapon] Featured Weapon Convene",
+    "During the event, 5-Star Weapon: Blade X receive boosted drop rates!",
+    "2026-01-01 10:00 - 2026-01-02 11:59 (server time)",
+  ];
+  assert.deepEqual(kuroBannerFacts(withWeapon, "[Solo Banner] Featured Resonator Convene"), [SOLO_FACT]);
+  const own = kuroBannerFacts(articleText(ARTICLE)!);
+  assert.equal(own.length, 2);
+  assert.deepEqual(kuroBannerFacts(articleText(ARTICLE)!, "[Other Title] Featured Resonator Convene"), own, "у статьи есть свои заголовки — название не нужно");
+});
+
+test("название статьи из JSON: сущности раскрыты, пробелы по краям убраны; нет названия — null", () => {
+  assert.equal(articleTitle({ articleTitle: " [A &amp; B] Featured Resonator Convene " }), "[A & B] Featured Resonator Convene");
+  assert.equal(articleTitle({ articleId: 1 }), null);
+  assert.equal(articleTitle({ articleTitle: 5 }), null);
+  assert.equal(articleTitle(null), null);
+});
+
+test("оружейный анонс: есть Weapon и нет Resonator в названии", () => {
+  assert.equal(isWeaponOnly("[Test Weapon] Featured Weapon Convene"), true);
+  assert.equal(isWeaponOnly("[Version 9.9 Featured Resonator/Weapon Convene: Phase I]"), false);
+  assert.equal(isWeaponOnly("[Test Banner] Featured Resonator Convene"), false);
+  assert.equal(isWeaponOnly("Convene Details"), false);
+});
+
+const T_OLD = announcement(9401, NOW - 3 * 86400);
+const T_NEW = announcement(9402, NOW - 86400);
+
+test("сигнал: самый свежий анонс прочитан и баннеров не дал — он; разобран — нет", () => {
+  assert.equal(unreadableAnnouncement([T_OLD, T_NEW], { "9401": [RELEASE_FACT], "9402": [] }, NOW)?.articleId, 9402);
+  assert.equal(unreadableAnnouncement([T_NEW, T_OLD], { "9401": [], "9402": [] }, NOW)?.articleId, 9402, "порядок списка не важен");
+  assert.equal(unreadableAnnouncement([T_OLD, T_NEW], { "9401": [], "9402": [RELEASE_FACT] }, NOW), null, "у самого свежего есть баннер, а у старого нет — сигнала нет");
+});
+
+test("сигнал: статья самого свежего анонса ещё не прочитана — сигнала нет, даже если старый анонс пуст", () => {
+  assert.equal(unreadableAnnouncement([T_OLD, T_NEW], { "9401": [] }, NOW), null);
+  assert.equal(unreadableAnnouncement([T_OLD, T_NEW], {}, NOW), null);
+  assert.equal(unreadableAnnouncement([], {}, NOW), null);
+});
+
+test("сигнал: анонсы старше 21 дня не считаются; вышедшие в одну секунду считаются вместе", () => {
+  const stale = announcement(9403, NOW - 22 * 86400);
+  assert.equal(unreadableAnnouncement([stale], { "9403": [] }, NOW), null);
+  assert.equal(unreadableAnnouncement([stale, T_OLD], { "9403": [], "9401": [RELEASE_FACT] }, NOW), null, "старый пустой не подменяет свежий разобранный");
+  const twin = announcement(9404, T_NEW.publishedAt);
+  assert.equal(unreadableAnnouncement([T_NEW, twin], { "9402": [RELEASE_FACT], "9404": [] }, NOW)?.articleId, 9404);
+  assert.equal(unreadableAnnouncement([T_NEW, twin], { "9402": [RELEASE_FACT], "9404": [RELEASE_FACT] }, NOW), null);
+});
+
+test("сигнал: оружейный анонс самым свежим не считается, даже если он новее и про него что-то помнится", () => {
+  const menu = [
+    { articleId: 9302, articleTitle: "[Test Weapon] Featured Weapon Convene", startTime: "2026-09-14 12:00:00" },
+    { articleId: 9301, articleTitle: "[Version 9.9 Featured Resonator/Weapon Convene: Phase I]", startTime: "2026-09-13 12:00:00" },
+  ];
+  const { announcements } = conveneAnnouncements(menu, NOW);
+  assert.deepEqual(announcements.map((a) => a.articleId), [9301]);
+  assert.equal(unreadableAnnouncement(announcements, { "9302": [], "9301": [RELEASE_FACT] }, NOW), null);
+  assert.equal(unreadableAnnouncement(announcements, { "9301": [] }, NOW)?.articleId, 9301, "а пустой анонс баннеров остаётся сигналом");
+});
+
+test("баннер фандома с другими кавычками и пробелами в названии — тот же баннер", () => {
+  const start = utc(2026, 10, 1, 3, 0);
+  const kuro = wuwa("Solo’s “Test”  Banner", start, { url: kuroArticleUrl(9001) });
+  for (const title of ["Solo's \"Test\" Banner", "SOLO‘S “TEST” BANNER ", "solo’s \"test\" banner"]) {
+    assert.equal(withKuroBanners(hubOf([wuwa(title, start + 3600)]), [kuro]).banners.length, 1, title);
+  }
+  assert.equal(withKuroBanners(hubOf([wuwa("Solo's Test Banner", start)]), [kuro]).banners.length, 2, "другое название — другой баннер");
 });

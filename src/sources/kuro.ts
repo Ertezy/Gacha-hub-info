@@ -3,8 +3,8 @@
 // имя 5★ резонатора, даты и конец техработ — со ссылкой на сам анонс. Ни текста
 // статей, ни картинок здесь нет. Источник убирается при первой просьбе Kuro
 // (спека §6.2, §7, поправка от 30 сентября 2026). Номер статьи и время её
-// публикации дополнительно служат сигналом владельцу: если из самого свежего
-// анонса баннер не вышел, сборщик открывает задачу.
+// публикации дополнительно служат сигналом владельцу: если самый свежий анонс
+// баннера персонажа прочитан, а баннера из него не вышло, сборщик открывает задачу.
 
 import { atOffset, EUROPE_SERVER_OFFSET_MINUTES, parseIsoLike } from "../time.ts";
 import { GAME_IDS, type Banner, type HubData } from "../types.ts";
@@ -46,7 +46,10 @@ const FRESH_SECONDS = 21 * 86400;
 /** Статья не старше 21 дня и уже опубликована. */
 export const isFresh = (publishedAt: number, now: number) => publishedAt >= now - FRESH_SECONDS && publishedAt <= now;
 
-/** Меню: свежие анонсы баннеров и свежие патчноуты, самые новые первыми. */
+/** Анонс только про оружие («[X] Featured Weapon Convene»): баннера персонажа в нём нет, читать его и ждать от него баннера незачем. */
+export const isWeaponOnly = (title: string) => /Featured Weapon Convene/i.test(title) && !/Resonator/i.test(title);
+
+/** Меню: свежие анонсы баннеров персонажей и свежие патчноуты, самые новые первыми. Оружейные анонсы пропускаются. */
 export function conveneAnnouncements(
   json: unknown,
   now: number,
@@ -57,8 +60,9 @@ export function conveneAnnouncements(
   for (const article of json as { articleId?: unknown; articleTitle?: unknown; startTime?: unknown }[]) {
     if (typeof article !== "object" || article === null) continue;
     if (typeof article.articleId !== "number" || typeof article.articleTitle !== "string" || typeof article.startTime !== "string") continue;
-    const isConvene = /convene/i.test(article.articleTitle) && !/^\s*convene details\s*$/i.test(article.articleTitle);
-    const version = patchNotesVersion(article.articleTitle);
+    const title = article.articleTitle;
+    const isConvene = /convene/i.test(title) && !/^\s*convene details\s*$/i.test(title) && !isWeaponOnly(title);
+    const version = patchNotesVersion(title);
     if (!isConvene && version === null) continue;
     const parts = parseIsoLike(article.startTime);
     if (!parts) continue;
@@ -72,13 +76,28 @@ export function conveneAnnouncements(
   return { found: true, announcements, patchNotes };
 }
 
-/** Самый свежий анонс, если он новее всех известных начал баннеров; иначе null. */
-export function unknownToWiki(announcements: Announcement[], knownStarts: number[]): Announcement | null {
-  const newest = announcements[0];
-  if (!newest) return null;
-  const latestKnown = knownStarts.length > 0 ? Math.max(...knownStarts) : Number.NEGATIVE_INFINITY;
-  return newest.publishedAt > latestKnown ? newest : null;
+/**
+ * Сигнал владельцу: самый свежий анонс баннера персонажа, статья которого прочитана,
+ * но баннеров в ней не нашлось. Решается по запомненным фактам (`facts` — по номеру
+ * статьи строкой): ключа нет — статью ещё не удалось прочитать (сбой сети, статус
+ * не 200), и это не повод для задачи; пустой список — прочитана, баннеров нет.
+ * Учитываются только свежие анонсы (не старше 21 дня); оружейные в список не попадают.
+ * Если несколько анонсов вышли в одну секунду, «самыми свежими» считаются все они.
+ */
+export function unreadableAnnouncement(
+  announcements: Announcement[],
+  facts: Record<string, KuroBannerFact[]>,
+  now: number,
+): Announcement | null {
+  const fresh = announcements.filter((a) => isFresh(a.publishedAt, now));
+  if (fresh.length === 0) return null;
+  const latest = Math.max(...fresh.map((a) => a.publishedAt));
+  const empty = fresh.filter((a) => a.publishedAt === latest && facts[String(a.articleId)]?.length === 0);
+  return empty.sort((a, b) => b.articleId - a.articleId)[0] ?? null;
 }
+
+/** Идёт ли ещё хотя бы один из баннеров, прочитанных из анонса: по ним анонс помнится и после 21 дня. */
+export const hasLiveBanner = (banners: KuroBannerFact[] | undefined, now: number) => (banners ?? []).some((b) => b.endsAt > now);
 
 /** Начало баннера: момент или «с выходом версии X.Y». */
 export type KuroStart = { kind: "at"; at: number } | { kind: "release"; version: string };
@@ -119,6 +138,13 @@ export function articleText(article: unknown): string[] | null {
     .filter((line) => line !== "");
 }
 
+/** Название статьи из её JSON (или null); из него берётся только заголовок одиночного баннера. */
+export function articleTitle(article: unknown): string | null {
+  if (typeof article !== "object" || article === null) return null;
+  const title = (article as { articleTitle?: unknown }).articleTitle;
+  return typeof title === "string" ? decodeEntities(title).trim() : null;
+}
+
 const RESONATOR_HEAD = /^\[(.+?)\]\s*Featured Resonator Convene\s*$/i;
 const ANY_HEAD = /^\[.+?\]\s*Featured (?:Resonator|Weapon) Convene\s*$/i;
 const FEATURED = /5-Star Resonator:\s*([^,!]+?)\s*(?:,|receive|!|$)/i;
@@ -126,37 +152,49 @@ const DURATION = /^(.+?)\s+-\s+(\d{4}-\d{2}-\d{2} \d{2}:\d{2})\s*\(server time\)
 const RELEASE_START = /^version\s+(\d+\.\d+)\s+update$/i;
 const MINUTE_STAMP = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/;
 
-/** Баннеры персонажей из анонса. Пустой массив — ничего не нашлось. */
-export function kuroBannerFacts(lines: string[]): KuroBannerFact[] {
+/** Баннер персонажа из блока строк под его заголовком; null — имени 5★ или понятных дат нет. */
+function blockFact(title: string, block: string[]): KuroBannerFact | null {
+  const featured = block.map((line) => FEATURED.exec(line)?.[1]).find((name) => name !== undefined);
+  const duration = block.map((line) => DURATION.exec(line)).find((m) => m !== null && m !== undefined);
+  if (!featured || !duration) return null;
+  const endParts = parseIsoLike(duration[2]!);
+  if (!endParts) return null;
+  const endsAt = atOffset(endParts, EUROPE_SERVER_OFFSET_MINUTES);
+  const from = duration[1]!.trim();
+  const release = RELEASE_START.exec(from);
+  if (release) return { title, featured, start: { kind: "release", version: release[1]! }, endsAt };
+  // Только «ГГГГ-ММ-ДД ЧЧ:ММ»: голая дата у parseIsoLike означала бы конец дня.
+  const startParts = MINUTE_STAMP.test(from) ? parseIsoLike(from) : null;
+  if (!startParts) return null;
+  const at = atOffset(startParts, EUROPE_SERVER_OFFSET_MINUTES);
+  if (at >= endsAt) return null;
+  return { title, featured, start: { kind: "at", at }, endsAt };
+}
+
+/**
+ * Баннеры персонажей из анонса. Пустой массив — ничего не нашлось. Одиночный баннер
+ * пишется без строки «[Название] Featured Resonator Convene» в теле — она есть только
+ * в названии статьи (`ownTitle`); тогда заголовком служит оно, а блок — всё тело
+ * до первого оружейного заголовка.
+ */
+export function kuroBannerFacts(lines: string[], ownTitle?: string | null): KuroBannerFact[] {
   const heads: number[] = [];
   lines.forEach((line, index) => {
     if (ANY_HEAD.test(line)) heads.push(index);
   });
   const facts: KuroBannerFact[] = [];
+  const push = (fact: KuroBannerFact | null) => {
+    if (fact) facts.push(fact);
+  };
+  if (!lines.some((line) => RESONATOR_HEAD.test(line))) {
+    const own = ownTitle ? RESONATOR_HEAD.exec(ownTitle.trim())?.[1]?.trim() : undefined;
+    if (own) push(blockFact(own, lines.slice(0, heads[0] ?? lines.length)));
+    return facts;
+  }
   heads.forEach((head, n) => {
     const title = RESONATOR_HEAD.exec(lines[head]!)?.[1]?.trim();
     if (!title) return; // блок оружия
-    const block = lines.slice(head + 1, heads[n + 1] ?? lines.length);
-    const featured = block.map((line) => FEATURED.exec(line)?.[1]).find((name) => name !== undefined);
-    const duration = block.map((line) => DURATION.exec(line)).find((m) => m !== null && m !== undefined);
-    if (!featured || !duration) return;
-    const endParts = parseIsoLike(duration[2]!);
-    if (!endParts) return;
-    const endsAt = atOffset(endParts, EUROPE_SERVER_OFFSET_MINUTES);
-    const from = duration[1]!.trim();
-    const release = RELEASE_START.exec(from);
-    let start: KuroStart;
-    if (release) {
-      start = { kind: "release", version: release[1]! };
-    } else {
-      // Только «ГГГГ-ММ-ДД ЧЧ:ММ»: голая дата у parseIsoLike означала бы конец дня.
-      const startParts = MINUTE_STAMP.test(from) ? parseIsoLike(from) : null;
-      if (!startParts) return;
-      const at = atOffset(startParts, EUROPE_SERVER_OFFSET_MINUTES);
-      if (at >= endsAt) return;
-      start = { kind: "at", at };
-    }
-    facts.push({ title, featured, start, endsAt });
+    push(blockFact(title, lines.slice(head + 1, heads[n + 1] ?? lines.length)));
   });
   return facts;
 }
@@ -174,10 +212,14 @@ export function maintenanceEnd(lines: string[]): number | null {
   return null;
 }
 
-/** Версия из заголовка патчноута («… Version 3.7 …») или null, если это не патчноут. */
+/**
+ * Версия из заголовка патчноута («… Version 3.7 …») или null, если это не патчноут.
+ * «Version 3.7.1» — уже другая версия (правка к 3.7), и время выхода 3.7 она задавать
+ * не должна: такой патчноут пропускается.
+ */
 export function patchNotesVersion(title: string): string | null {
   if (!/patch notes/i.test(title)) return null;
-  return /version\s+(\d+\.\d+)/i.exec(title)?.[1] ?? null;
+  return /version\s+(\d+\.\d+)(?!\d|\.\d)/i.exec(title)?.[1] ?? null;
 }
 
 /** Анонс и баннеры, прочитанные из его статьи. */
@@ -216,9 +258,18 @@ export function kuroBanners(facts: AnnouncementFacts[], releases: Record<string,
 /** Одно название и начала в пределах 2 суток — это один и тот же баннер, а не его повтор. */
 const SAME_BANNER_SECONDS = 2 * 86400;
 
+/** Название для сравнения: кривые и прямые кавычки и апострофы одинаковы, пробелы схлопнуты, регистр не важен. */
+const comparableTitle = (title: string) =>
+  title
+    .replace(/[‘’]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+
 const sameBanner = (a: Banner, b: Banner) =>
   a.gameId === b.gameId &&
-  a.title.trim().toLowerCase() === b.title.trim().toLowerCase() &&
+  comparableTitle(a.title) === comparableTitle(b.title) &&
   Math.abs(a.startsAt - b.startsAt) <= SAME_BANNER_SECONDS;
 
 /**

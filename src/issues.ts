@@ -122,7 +122,7 @@ export function planIssues(input: IssueInputs): IssueAction[] {
   const signalKey = input.wuwaSignal ? `wuwa-signal:${input.wuwaSignal.articleId}` : null;
   for (const [key, number] of openByKey) {
     if (key.startsWith("wuwa-signal:") && key !== signalKey) {
-      actions.push({ type: "close", number, comment: "Баннер теперь в панели (фандом узнал о нём или сборщик разобрал анонс) либо вышел новый анонс, задача закрыта." });
+      actions.push({ type: "close", number, comment: "Сборщик разобрал анонс, вышел более новый анонс или этому анонсу исполнился 21 день — задача закрыта." });
     }
   }
   if (input.wuwaSignal && signalKey) {
@@ -130,7 +130,7 @@ export function planIssues(input: IssueInputs): IssueAction[] {
       signalKey,
       true,
       "Анонс баннера Wuthering Waves не разобрался",
-      `Kuro Games опубликовала анонс баннеров: ${input.wuwaSignal.url} (${formatTime(input.wuwaSignal.publishedAt)}).\n\nСборщик не смог прочитать из него название и сроки, поэтому в панели этого цикла нет. Впиши баннер в overrides.json — пример в README. Когда фандом создаст страницу, данные перейдут на неё, и задача закроется сама.`,
+      `Kuro Games опубликовала анонс баннеров: ${input.wuwaSignal.url} (${formatTime(input.wuwaSignal.publishedAt)}).\n\nСборщик открыл статью, но не смог прочитать из неё название и сроки баннера персонажа, поэтому в панели этого цикла нет. Впиши баннер в overrides.json — пример в README. Когда фандом создаст страницу, в панель пойдёт запись оттуда. Сама задача закроется, когда сборщик сможет разобрать анонс, выйдет более новый анонс или этому анонсу исполнится 21 день.`,
       "",
     );
   }

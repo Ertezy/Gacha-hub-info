@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { baseFromPublished, emptyState, isDue, loadState, missingPrevious, pruneState, recordRun, saveState } from "../src/state.ts";
 import type { Failure } from "../src/issues.ts";
 import { KURO_MENU_URL, kuroArticleUrl } from "../src/sources/kuro.ts";
+import { KURO_SIGNAL } from "../src/sources/registry.ts";
 import type { HubData, Item, SourceRun } from "../src/types.ts";
 
 const NOW = 1_000_000;
@@ -177,6 +178,22 @@ test("состояние прошлой версии без фактов Kuro з
   assert.deepEqual(loaded.memory.revisions, { a: 1 }, "остальная память на месте");
   // Без этого меню при ответе 304 оставило бы патчноуты неизвестными до следующего анонса.
   assert.deepEqual(loaded.memory.validators, { other: { etag: '"o1"' } });
+});
+
+test("обновление состояния прошлой версии забывает и отметку запуска сигнала Kuro, остальные отметки остаются", () => {
+  const dir = mkdtempSync(join(tmpdir(), "collector-"));
+  const path = join(dir, "state.json");
+  const old = { version: 1, base: null, published: null, lastPublishedAt: null, failures: {} };
+  const lastRun = { [KURO_SIGNAL.id]: NOW - 60, "genshin-codes": NOW - 120 };
+  const oldMemory = { revisions: {}, pages: {}, validators: {}, kuro: [] };
+  writeFileSync(path, JSON.stringify({ ...old, lastRun, memory: oldMemory }));
+  const upgraded = loadState(path);
+  assert.ok(upgraded);
+  assert.deepEqual(upgraded.lastRun, { "genshin-codes": NOW - 120 }, "первый запуск после обновления сразу идёт на сайт Kuro");
+  assert.equal(isDue((upgraded.lastRun as Record<string, number>)[KURO_SIGNAL.id], KURO_SIGNAL.everyHours, NOW), true);
+  // Состояние уже нового вида не трогается: отметка сигнала остаётся.
+  writeFileSync(path, JSON.stringify({ ...old, lastRun, memory: { ...oldMemory, kuroFacts: {}, kuroReleases: {}, kuroPatchNotes: [] } }));
+  assert.deepEqual(loadState(path)?.lastRun, lastRun);
 });
 
 test("факты Kuro в состоянии сохраняются и читаются как есть, метки меню остаются", () => {

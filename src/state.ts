@@ -5,7 +5,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { Failure } from "./issues.ts";
 import { KURO_MENU_URL, isKuroUrl } from "./sources/kuro.ts";
-import { emptyMemory, type SourceMemory } from "./sources/registry.ts";
+import { KURO_SIGNAL, emptyMemory, type SourceMemory } from "./sources/registry.ts";
 import type { HubData, Item, SourceRun } from "./types.ts";
 
 export const STATE_FILE = ".collector-state/state.json";
@@ -70,21 +70,25 @@ function looksLikeState(value: unknown): value is State {
 
 /**
  * Файл состояния прошлой версии не знает про факты Kuro: им даются пустые умолчания.
- * Метки версий меню при этом забываются — иначе меню ответило бы 304, и патчноуты с
- * анонсами не читались бы до следующей новости.
+ * Метки версий меню при этом забываются: иначе меню ответило бы 304, и патчноуты, о
+ * которых старая память не знает, не читались бы до следующей новости в меню (анонсы
+ * при 304 берутся из памяти и читались бы и так). Отметка последнего запуска сигнала
+ * тоже забывается: первый же запуск после обновления сразу идёт на сайт Kuro, а не
+ * ждёт до шести часов, и открытая задача по старому условию закрывается сразу.
  */
-function upgradeMemory(memory: Record<string, unknown>): void {
+function upgradeState(state: Record<string, unknown>, memory: Record<string, unknown>): void {
   if (memory.kuroFacts !== undefined && memory.kuroReleases !== undefined && memory.kuroPatchNotes !== undefined) return;
   memory.kuroFacts ??= {};
   memory.kuroReleases ??= {};
   memory.kuroPatchNotes ??= [];
   if (isRecord(memory.validators)) delete memory.validators[KURO_MENU_URL];
+  if (isRecord(state.lastRun)) delete state.lastRun[KURO_SIGNAL.id];
 }
 
 export function loadState(path = STATE_FILE): State | null {
   try {
     const raw: unknown = JSON.parse(readFileSync(path, "utf8"));
-    if (isRecord(raw) && isRecord(raw.memory)) upgradeMemory(raw.memory);
+    if (isRecord(raw) && isRecord(raw.memory)) upgradeState(raw, raw.memory);
     return looksLikeState(raw) ? raw : null;
   } catch {
     return null;

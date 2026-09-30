@@ -10,7 +10,9 @@ import {
   KURO_ARTICLE_JSON_DIR,
   KURO_MENU_URL,
   articleText,
+  articleTitle,
   conveneAnnouncements,
+  hasLiveBanner,
   isFresh,
   kuroArticleJsonUrl,
   kuroBannerFacts,
@@ -26,11 +28,14 @@ export interface SourceMemory {
   revisions: Record<string, number>;
   pages: Record<string, { rev: number; outcome: PageOutcome }>;
   validators: Record<string, Validators>;
-  /** Свежие анонсы баннеров из меню Kuro. */
+  /** Анонсы баннеров персонажей из меню Kuro: свежие (не старше 21 дня) и старше, пока идёт их баннер; новые первыми. */
   kuro: Announcement[];
   /** Свежие патчноуты из меню: при ответе 304 по ним видно, какие статьи ещё читать. */
   kuroPatchNotes: PatchNotes[];
-  /** Баннеры, прочитанные из статьи анонса, — по номеру статьи строкой. Только факты, текста нет. */
+  /**
+   * Баннеры, прочитанные из статьи анонса, — по номеру статьи строкой. Только факты, текста нет.
+   * Ключ есть — статья прочитана (пустой список: баннеров в ней не нашлось); ключа нет — её ещё не удалось прочитать.
+   */
   kuroFacts: Record<string, KuroBannerFact[]>;
   /** Конец техработ версии, из её патчноута, — по номеру версии. */
   kuroReleases: Record<string, number>;
@@ -267,6 +272,9 @@ export const KURO_SIGNAL = { id: "wuthering-signal", label: "анонсы бан
  * Меню Kuro и статьи из него: анонсы баннеров и патчноуты. Всё условными запросами;
  * то, что уже разобрано, лежит в памяти. Сбой меню — поломка источника; сбой статьи
  * — предупреждение: прошлые факты остаются, статья перечитывается в следующий раз.
+ * Окно в 21 день ограничивает, какие анонсы читаются и берутся для сигнала (это
+ * `announcements` в ответе); в памяти (`memory.kuro`) анонс остаётся, пока идёт хотя
+ * бы один его баннер.
  */
 export async function fetchKuroAnnouncements(
   ctx: SourceContext,
@@ -287,7 +295,10 @@ export async function fetchKuroAnnouncements(
       patchNotes = r.patchNotes;
       memory.validators[KURO_MENU_URL] = res.validators;
     }
-    memory.kuro = announcements;
+    // Вышедший из окна анонс не читается заново, но его баннеры идут, пока не закончатся.
+    const freshIds = new Set(announcements.map((a) => a.articleId));
+    const retained = memory.kuro.filter((a) => !freshIds.has(a.articleId) && hasLiveBanner(memory.kuroFacts[String(a.articleId)], now));
+    memory.kuro = [...announcements, ...retained].sort((a, b) => b.publishedAt - a.publishedAt);
     memory.kuroPatchNotes = patchNotes;
     return { ok: true, announcements, warnings: await readKuroArticles(ctx, announcements, patchNotes) };
   } catch (error) {
@@ -305,22 +316,31 @@ async function readKuroArticles(ctx: SourceContext, announcements: Announcement[
     try {
       const res = await conditional(ctx, url);
       if (res === null) continue; // не менялась — прошлый результат остаётся
-      const lines = articleText(JSON.parse(res.body));
+      const article: unknown = JSON.parse(res.body);
+      const lines = articleText(article);
       if (lines === null) throw new Error("в статье нет текста");
-      if (announcements.some((a) => a.articleId === id)) memory.kuroFacts[String(id)] = kuroBannerFacts(lines);
+      // Ключ в kuroFacts появляется, только когда статья прочитана; пустой список — баннеров в ней не нашлось.
+      // Статья, которую не удалось открыть, ключа не получает (и не даёт сигнала), а прошлые факты остаются.
+      if (announcements.some((a) => a.articleId === id)) memory.kuroFacts[String(id)] = kuroBannerFacts(lines, articleTitle(article));
+      const end = maintenanceEnd(lines);
       for (const { version } of patchNotes.filter((p) => p.articleId === id)) {
-        const end = maintenanceEnd(lines);
-        if (end === null) delete memory.kuroReleases[version];
-        else memory.kuroReleases[version] = end;
+        // Строки техработ нет — уже известный срок версии не трогается. Два патчноута одной версии:
+        // побеждает более новый (патчноуты идут от новых к старым), старый пишет, только если срока нет.
+        const newest = patchNotes.find((p) => p.version === version)?.articleId === id;
+        if (end !== null && (newest || memory.kuroReleases[version] === undefined)) memory.kuroReleases[version] = end;
       }
       memory.validators[url] = res.validators;
     } catch (error) {
       warnings.push(`статья Kuro ${id}: ${(error as Error).message}`);
     }
   }
-  const factIds = new Set(announcements.map((a) => String(a.articleId)));
+  // Факты и сроки версий живут, пока анонс в памяти (свежий или с идущим баннером).
+  const factIds = new Set(memory.kuro.map((a) => String(a.articleId)));
   for (const key of Object.keys(memory.kuroFacts)) if (!factIds.has(key)) delete memory.kuroFacts[key];
   const versions = new Set(patchNotes.map((p) => p.version));
+  for (const banners of Object.values(memory.kuroFacts)) {
+    for (const { start } of banners) if (start.kind === "release") versions.add(start.version);
+  }
   for (const version of Object.keys(memory.kuroReleases)) if (!versions.has(version)) delete memory.kuroReleases[version];
   const urls = new Set(ids.map(kuroArticleJsonUrl));
   for (const url of Object.keys(memory.validators)) if (url.startsWith(KURO_ARTICLE_JSON_DIR) && !urls.has(url)) delete memory.validators[url];
@@ -330,11 +350,3 @@ async function readKuroArticles(ctx: SourceContext, announcements: Announcement[
 /** Анонсы вместе с баннерами, что разобраны из их статей и лежат в памяти. */
 export const kuroFactsFromMemory = (memory: SourceMemory, announcements: Announcement[]): AnnouncementFacts[] =>
   announcements.map((announcement) => ({ announcement, banners: memory.kuroFacts[String(announcement.articleId)] ?? [] }));
-
-/** Начала всех баннеров Wuthering Waves, которые фандом уже знает (в том числе закончившихся). */
-export function wuwaKnownStarts(memory: SourceMemory): number[] {
-  const prefix = `${fandom(BANNER_PAGES.wuthering.wiki).api}|`;
-  return Object.entries(memory.pages)
-    .filter(([key]) => key.startsWith(prefix))
-    .flatMap(([, page]) => (page.outcome.kind === "banner" ? [page.outcome.draft.banner.startsAt] : []));
-}
