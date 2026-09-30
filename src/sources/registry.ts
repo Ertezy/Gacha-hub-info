@@ -320,13 +320,19 @@ async function readKuroArticles(ctx: SourceContext, announcements: Announcement[
       const article: unknown = JSON.parse(res.body);
       // Ответ 200 без текста статьи (не объект, нет articleContent или он не строка) — статья прочитана, баннеров
       // в ней нет: так смена формата JSON не остаётся незамеченной, а по свежему анонсу открывается задача.
+      // Уже найденные баннеры такой ответ не стирает — разовый сбой сайта не прячет их из панели.
       const text = articleText(article);
       if (text === null) warnings.push(`статья Kuro ${id}: в ответе нет текста статьи — считается прочитанной без баннеров`);
       const lines = text ?? [];
       // Ключ в kuroFacts появляется, только когда статья прочитана; пустой список — баннеров в ней не нашлось.
       // Статья, которую не удалось открыть (сеть, статус не 200, не JSON), ключа не получает (и не даёт сигнала),
       // а прошлые факты остаются.
-      if (announcements.some((a) => a.articleId === id)) memory.kuroFacts[String(id)] = kuroBannerFacts(lines, articleTitle(article));
+      if (announcements.some((a) => a.articleId === id)) {
+        const key = String(id);
+        const previous = memory.kuroFacts[key];
+        const keep = text === null && previous !== undefined && previous.length > 0;
+        memory.kuroFacts[key] = keep ? previous : kuroBannerFacts(lines, articleTitle(article));
+      }
       const end = maintenanceEnd(lines);
       for (const { version } of patchNotes.filter((p) => p.articleId === id)) {
         // Строки техработ нет — уже известный срок версии не трогается. Два патчноута одной версии:

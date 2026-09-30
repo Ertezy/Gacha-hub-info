@@ -366,6 +366,33 @@ test("оружейный анонс: есть Weapon и нет Resonator в на
   assert.equal(isWeaponOnly("[Version 9.9 Featured Resonator/Weapon Convene: Phase I]"), false);
   assert.equal(isWeaponOnly("[Test Banner] Featured Resonator Convene"), false);
   assert.equal(isWeaponOnly("Convene Details"), false);
+  assert.equal(isWeaponOnly("[Test Weapon] Reverb Weapon Convene"), true);
+  assert.equal(isWeaponOnly("[Test Weapon] Collab Weapon Convene"), true);
+  assert.equal(isWeaponOnly("[Test Rerun] Reverb Resonator Convene"), false);
+});
+
+test("повторный (Reverb) и совместный (Collab) баннеры персонажей тоже читаются", () => {
+  const facts = kuroBannerFacts([
+    "[Test Rerun] Reverb Resonator Convene",
+    "During the event, selectable 5-Star Resonators: Resonator A, Resonator B, and Resonator C, and 4-Star Resonators: D receive boosted drop rates!",
+    "Version 9.9 update - 2026-10-22 09:59 (server time)",
+    "[Test Collab] Collab Resonator Convene",
+    "During the event, 5-Star Resonator: Resonator Z, 4-Star Resonators: E receive boosted drop rates!",
+    "2026-10-22 10:00 - 2026-11-11 11:59 (server time)",
+    "[Test Collab Weapon] Collab Weapon Convene",
+    "Version 9.9 update - 2026-10-22 09:59 (server time)",
+  ]);
+  assert.deepEqual(facts, [
+    { title: "Test Rerun", featured: "", start: { kind: "release", version: "9.9" }, endsAt: utc(2026, 10, 22, 8, 59) },
+    { title: "Test Collab", featured: "Resonator Z", start: { kind: "at", at: utc(2026, 10, 22, 9, 0) }, endsAt: utc(2026, 11, 11, 10, 59) },
+  ]);
+});
+
+test("баннер с выбором персонажа — без имён в записи", () => {
+  const rerun: KuroBannerFact = { title: "Test Rerun", featured: "", start: { kind: "release", version: "9.9" }, endsAt: utc(2026, 10, 22, 8, 59) };
+  const banners = kuroBanners([{ announcement: announcement(9001, PUBLISHED), banners: [rerun] }], { "9.9": utc(2026, 10, 1, 3, 0) }, NOW);
+  assert.equal(banners.length, 1);
+  assert.deepEqual(banners[0]!.featured, []);
 });
 
 const T_OLD = announcement(9401, NOW - 3 * 86400);

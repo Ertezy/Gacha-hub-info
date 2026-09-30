@@ -47,8 +47,8 @@ const FRESH_SECONDS = 21 * 86400;
 /** Статья не старше 21 дня и уже опубликована. */
 export const isFresh = (publishedAt: number, now: number) => publishedAt >= now - FRESH_SECONDS && publishedAt <= now;
 
-/** Анонс только про оружие («[X] Featured Weapon Convene»): баннера персонажа в нём нет, читать его и ждать от него баннера незачем. */
-export const isWeaponOnly = (title: string) => /Featured Weapon Convene/i.test(title) && !/Resonator/i.test(title);
+/** Анонс только про оружие («[X] Featured / Reverb / Collab Weapon Convene»): баннера персонажа в нём нет, читать его и ждать от него баннера незачем. */
+export const isWeaponOnly = (title: string) => /Weapon Convene/i.test(title) && !/Resonator/i.test(title);
 
 /** Меню: свежие анонсы баннеров персонажей и свежие патчноуты, самые новые первыми. Оружейные анонсы пропускаются. */
 export function conveneAnnouncements(
@@ -113,7 +113,7 @@ export type KuroStart = { kind: "at"; at: number } | { kind: "release"; version:
 
 export interface KuroBannerFact {
   title: string;
-  /** Имя 5★ резонатора. */
+  /** Имя 5★ резонатора; пустая строка — у повторного баннера персонажа выбирают из списка. */
   featured: string;
   start: KuroStart;
   /** Unix-секунды. */
@@ -154,18 +154,23 @@ export function articleTitle(article: unknown): string | null {
   return typeof title === "string" ? decodeEntities(title).trim() : null;
 }
 
-const RESONATOR_HEAD = /^\[(.+?)\]\s*Featured Resonator Convene\s*$/i;
-const ANY_HEAD = /^\[.+?\]\s*Featured (?:Resonator|Weapon) Convene\s*$/i;
+// Баннеры персонажей бывают обычные (Featured), повторные (Reverb) и совместные (Collab).
+const RESONATOR_HEAD = /^\[(.+?)\]\s*(?:Featured|Reverb|Collab)\s+Resonator Convene\s*$/i;
+const ANY_HEAD = /^\[.+?\]\s*(?:Featured|Reverb|Collab)\s+(?:Resonator|Weapon) Convene\s*$/i;
 const FEATURED = /5-Star Resonator:\s*([^,!]+?)\s*(?:,|receive|!|$)/i;
 const DURATION = /^(.+?)\s+-\s+(\d{4}-\d{2}-\d{2} \d{2}:\d{2})\s*\(server time\)/i;
 const RELEASE_START = /^version\s+(\d+\.\d+)\s+update$/i;
 const MINUTE_STAMP = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/;
+const SELECTABLE = /selectable 5-Star Resonators?:/i;
 
 /** Баннер персонажа из блока строк под его заголовком; null — имени 5★ или понятных дат нет. */
 function blockFact(title: string, block: string[]): KuroBannerFact | null {
-  const featured = block.map((line) => FEATURED.exec(line)?.[1]).find((name) => name !== undefined);
+  const named = block.map((line) => FEATURED.exec(line)?.[1]).find((name) => name !== undefined);
+  // У повторного баннера (Reverb) 5★ персонажа игрок выбирает из списка — одного имени нет,
+  // и баннер показывается без имён (пустая строка).
+  const featured = named ?? (block.some((line) => SELECTABLE.test(line)) ? "" : undefined);
   const duration = block.map((line) => DURATION.exec(line)).find((m) => m !== null && m !== undefined);
-  if (!featured || !duration) return null;
+  if (featured === undefined || !duration) return null;
   const endParts = parseIsoLike(duration[2]!);
   if (!endParts) return null;
   const endsAt = atOffset(endParts, EUROPE_SERVER_OFFSET_MINUTES);
@@ -248,11 +253,12 @@ export function kuroBanners(facts: AnnouncementFacts[], releases: Record<string,
   for (const { announcement, banners: list } of facts) {
     for (const fact of list) {
       const startsAt = fact.start.kind === "at" ? fact.start.at : (releases[fact.start.version] ?? announcement.publishedAt);
-      if (fact.endsAt <= now || fact.endsAt <= startsAt || !bannerFits(fact.title, [fact.featured])) continue;
+      const featured = fact.featured ? [fact.featured] : [];
+      if (fact.endsAt <= now || fact.endsAt <= startsAt || !bannerFits(fact.title, featured)) continue;
       banners.push({
         gameId: "wuthering",
         title: fact.title,
-        featured: [fact.featured],
+        featured,
         rarity: 5,
         image: null,
         startsAt,

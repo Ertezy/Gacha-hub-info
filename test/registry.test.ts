@@ -595,7 +595,7 @@ test("анонсы Kuro: ответ 200 без текста статьи — п�
   }
 });
 
-test("анонсы Kuro: ответ 200 без текста заменяет прошлые факты; когда статья снова с текстом, факты возвращаются", async () => {
+test("анонсы Kuro: разовый ответ 200 без текста не стирает найденные баннеры; статья с текстом — снова как обычно", async () => {
   const replies = new Map<number, HttpResponse>();
   const k = kuroSiteWith(replies);
   const memory = emptyMemory();
@@ -604,8 +604,8 @@ test("анонсы Kuro: ответ 200 без текста заменяет п�
   assert.equal(unreadable(memory), null);
   replies.set(9001, json({ articleId: 9001 }, '"g1"'));
   await fetchKuroAnnouncements({ http: k.http, now: NOW, memory });
-  assert.deepEqual(memory.kuroFacts, { "9001": [] });
-  assert.equal(unreadable(memory), 9001);
+  assert.deepEqual(memory.kuroFacts, { "9001": [FACT] }, "прошлые факты остались");
+  assert.equal(unreadable(memory), null);
   replies.delete(9001); // на запрос с метками пустого ответа сайт отвечает 200 с прежней статьёй
   await fetchKuroAnnouncements({ http: k.http, now: NOW, memory });
   assert.deepEqual(memory.kuroFacts, { "9001": [FACT] });
