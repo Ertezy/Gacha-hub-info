@@ -53,6 +53,12 @@ export interface HubGame {
   match: { steamAppIds: number[]; epicAppNames: string[]; folderNames: string[] };
 }
 
+/** Последняя опубликованная версия приложения: номер без «v» и страница релиза. */
+export interface AppRelease {
+  version: string;
+  url: string;
+}
+
 export interface HubData {
   version: 2;
   updatedAt: number;
@@ -60,6 +66,8 @@ export interface HubData {
   codes: Code[];
   banners: Banner[];
   videos: Video[];
+  /** Есть, только когда опубликован хотя бы один релиз приложения. */
+  app?: AppRelease;
 }
 
 export type Item = Code | Banner | Video;

@@ -30,7 +30,8 @@ export interface HttpOptions {
 }
 
 export interface Http {
-  get(url: string, validators?: Validators): Promise<HttpResponse>;
+  /** headers — дополнительные заголовки запроса (например, токен API); подпись и условные заголовки ставятся всегда. */
+  get(url: string, validators?: Validators, headers?: Record<string, string>): Promise<HttpResponse>;
 }
 
 /** Пауза для ennead.cc: их объявленный лимит — 2 запроса в секунду. */
@@ -48,8 +49,8 @@ export function createHttp(options: HttpOptions = {}): Http {
   const queues = new Map<string, Promise<unknown>>();
   const lastStart = new Map<string, number>();
 
-  async function attempt(url: string, validators: Validators): Promise<HttpResponse> {
-    const headers: Record<string, string> = { "User-Agent": USER_AGENT };
+  async function attempt(url: string, validators: Validators, extra: Record<string, string>): Promise<HttpResponse> {
+    const headers: Record<string, string> = { ...extra, "User-Agent": USER_AGENT };
     if (validators.etag) headers["If-None-Match"] = validators.etag;
     if (validators.lastModified) headers["If-Modified-Since"] = validators.lastModified;
     const res = await doFetch(url, { headers, signal: AbortSignal.timeout(timeoutMs) });
@@ -65,9 +66,9 @@ export function createHttp(options: HttpOptions = {}): Http {
     return { status: 200, body, validators: fresh };
   }
 
-  async function withRetry(url: string, validators: Validators): Promise<HttpResponse> {
+  async function withRetry(url: string, validators: Validators, extra: Record<string, string>): Promise<HttpResponse> {
     try {
-      return await attempt(url, validators);
+      return await attempt(url, validators, extra);
     } catch (error) {
       // Не повторяем только превышение потолка размера и коды ответа не из RETRYABLE
       // (например, 404) — это не временные сбои. Сеть, таймаут и повторяемые коды
@@ -75,12 +76,12 @@ export function createHttp(options: HttpOptions = {}): Http {
       if (error instanceof TooLargeError) throw error;
       if (error instanceof StatusError && !RETRYABLE.has(error.status)) throw error;
       await sleep(retryDelayMs);
-      return attempt(url, validators);
+      return attempt(url, validators, extra);
     }
   }
 
   return {
-    get(url, validators = {}) {
+    get(url, validators = {}, headers = {}) {
       if (!url.startsWith("https://")) return Promise.reject(new Error(`только https: ${url}`));
       const host = new URL(url).host;
       const previous = queues.get(host) ?? Promise.resolve();
@@ -91,7 +92,7 @@ export function createHttp(options: HttpOptions = {}): Http {
           const since = Date.now() - (lastStart.get(host) ?? 0);
           if (gap > 0 && since < gap) await sleep(gap - since);
           lastStart.set(host, Date.now());
-          return withRetry(url, validators);
+          return withRetry(url, validators, headers);
         });
       queues.set(host, task);
       return task;

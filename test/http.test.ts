@@ -93,3 +93,19 @@ test("к одному хосту запросы идут по одному", asy
   await Promise.all([http.get("https://example.org/a"), http.get("https://example.org/b"), http.get("https://example.org/c")]);
   assert.equal(peak, 1);
 });
+
+test("дополнительные заголовки идут вместе с подписью и условными", async () => {
+  const f = fakeFetch([{ status: 200, body: "ok" }]);
+  const http = createHttp({ fetch: f.fetch, sleep: noSleep });
+  await http.get("https://example.org/a", { etag: '"v1"' }, { Authorization: "Bearer t", Accept: "application/json" });
+  assert.equal(f.calls[0]!.headers["User-Agent"], USER_AGENT);
+  assert.equal(f.calls[0]!.headers["If-None-Match"], '"v1"');
+  assert.equal(f.calls[0]!.headers.Authorization, "Bearer t");
+  assert.equal(f.calls[0]!.headers.Accept, "application/json");
+});
+
+test("дополнительные заголовки сохраняются и в повторе", async () => {
+  const f = fakeFetch([{ status: 503 }, { status: 200, body: "ok" }]);
+  await createHttp({ fetch: f.fetch, sleep: noSleep }).get("https://example.org/a", {}, { Authorization: "Bearer t" });
+  assert.equal(f.calls[1]!.headers.Authorization, "Bearer t");
+});
