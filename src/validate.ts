@@ -1,6 +1,7 @@
 // Последний рубеж перед выкладкой: файл проверяется по тем же правилам, что
 // соблюдает приложение. Не прошёл — в сети остаётся прошлый рабочий файл.
 
+import { VERSION } from "./sources/appRelease.ts";
 import { CODE_PATTERN } from "./sources/codes.ts";
 import { VIDEOS_PER_GAME } from "./sources/videos.ts";
 import { GAME_IDS, VIDEO_LANGS, type HubData } from "./types.ts";
@@ -92,7 +93,7 @@ export function validateHub(hub: HubData, maxBytes = MAX_FILE_BYTES): string[] {
   }
 
   if (hub.app !== undefined) {
-    if (!(typeof hub.app.version === "string" && /^\d+\.\d+\.\d+$/.test(hub.app.version))) fail("app.version: три числа через точку");
+    if (!(typeof hub.app.version === "string" && VERSION.test(hub.app.version))) fail("app.version: три числа через точку");
     if (!(typeof hub.app.url === "string" && hub.app.url.startsWith("https://"))) fail("app.url: https");
   }
 

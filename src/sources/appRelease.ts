@@ -12,7 +12,8 @@ export const APP_RELEASE_URL = "https://api.github.com/repos/Ertezy/Gacha-hub/re
 
 export const APP_RELEASE = { id: "app-release", label: "последняя версия приложения (GitHub Releases)", everyHours: 6 } as const;
 
-const VERSION = /^\d+\.\d+\.\d+$/;
+// Ту же проверку («три числа») делает приложение: `src-tauri/src/hub/schema.rs` и `src/lib/update.ts`.
+export const VERSION = /^\d+\.\d+\.\d+$/;
 
 /** Номер (без ведущей «v») и страница релиза из ответа GitHub; ответ не той формы — null. */
 export function parseAppRelease(json: unknown): AppRelease | null {
