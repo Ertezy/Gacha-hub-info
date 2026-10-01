@@ -88,3 +88,13 @@ test("видео: язык обязателен, лимит шесть на иг
   const odd = { ...base, videos: [v(1, "fr")] } as unknown as HubData;
   assert.ok(validateHub(odd).some((e) => e.includes("lang")));
 });
+
+test("поле app: необязательное, три числа через точку и https", () => {
+  const hub = good();
+  hub.app = { version: "0.1.1", url: "https://github.com/Ertezy/Gacha-hub/releases/tag/v0.1.1" };
+  assert.deepEqual(validateHub(hub), []);
+  hub.app = { version: "0.1", url: "http://github.com/x" };
+  const errors = validateHub(hub);
+  assert.ok(errors.some((e) => e.startsWith("app.version")));
+  assert.ok(errors.some((e) => e.startsWith("app.url")));
+});

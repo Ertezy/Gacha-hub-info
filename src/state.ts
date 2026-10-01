@@ -65,7 +65,8 @@ function looksLikeState(value: unknown): value is State {
     Array.isArray(memory.kuroPatchNotes) &&
     isRecord(memory.kuroFacts) &&
     isRecord(memory.kuroReleases) &&
-    isRecord(memory.bannerArt)
+    isRecord(memory.bannerArt) &&
+    (memory.appRelease === null || isRecord(memory.appRelease))
   );
 }
 
@@ -78,10 +79,12 @@ function looksLikeState(value: unknown): value is State {
  * ждёт до шести часов, и открытая задача по старому условию закрывается сразу.
  *
  * Памяти об арте прошлых запусков (1 октября) у старого файла тоже нет: она пустая и
- * заполнится на первом же прогоне, остальное при этом не трогается.
+ * заполнится на первом же прогоне, остальное при этом не трогается. То же с памятью о
+ * версии приложения (1 октября): null, спросится на первом прогоне.
  */
 function upgradeState(state: Record<string, unknown>, memory: Record<string, unknown>): void {
   memory.bannerArt ??= {};
+  memory.appRelease ??= null;
   if (memory.kuroFacts !== undefined && memory.kuroReleases !== undefined && memory.kuroPatchNotes !== undefined) return;
   memory.kuroFacts ??= {};
   memory.kuroReleases ??= {};
@@ -141,12 +144,15 @@ export function pruneState(state: State, knownIds: ReadonlySet<string>): string[
 
 /** Прошлые данные из выложенного файла без записей владельца (они вернутся из overrides.json) и без баннеров Kuro. */
 export function baseFromPublished(hub: HubData): HubData {
-  return {
+  const base: HubData = {
     ...hub,
     codes: hub.codes.filter((c) => c.source !== null),
     // Баннеры Kuro пересчитываются из памяти каждый прогон и в основу не попадают.
     banners: hub.banners.filter((b) => b.url !== null && !isKuroUrl(b.url)),
   };
+  // Версия приложения тоже ставится из памяти каждый прогон.
+  delete base.app;
+  return base;
 }
 
 /**

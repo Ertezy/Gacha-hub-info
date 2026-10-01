@@ -220,6 +220,30 @@ test("память об арте не того вида — состояние �
   assert.deepEqual(loadState(path), valid);
 });
 
+test("состояние без памяти о версии приложения получает null, остальное не трогается", () => {
+  const dir = mkdtempSync(join(tmpdir(), "collector-"));
+  const path = join(dir, "state.json");
+  const lastRun = { [KURO_SIGNAL.id]: NOW - 60 };
+  const memory = { revisions: {}, pages: {}, validators: { [KURO_MENU_URL]: { etag: '"k1"' } }, kuro: [], kuroFacts: {}, kuroReleases: {}, kuroPatchNotes: [], bannerArt: {} };
+  writeFileSync(path, JSON.stringify({ version: 1, base: null, published: null, lastPublishedAt: null, lastRun, failures: {}, memory }));
+  const loaded = loadState(path);
+  assert.ok(loaded);
+  assert.equal(loaded.memory.appRelease, null);
+  assert.deepEqual(loaded.lastRun, lastRun, "сигнал Kuro не перезапускается");
+  assert.deepEqual(loaded.memory.validators, memory.validators, "метки меню остаются");
+});
+
+test("версия приложения не того вида — состояние считается отсутствующим, правильная читается как есть", () => {
+  const dir = mkdtempSync(join(tmpdir(), "collector-"));
+  const path = join(dir, "state.json");
+  const valid = emptyState();
+  writeFileSync(path, JSON.stringify({ ...valid, memory: { ...valid.memory, appRelease: "0.1.1" } }));
+  assert.equal(loadState(path), null, "appRelease — строка");
+  valid.memory.appRelease = { version: "0.1.1", url: "https://github.com/Ertezy/Gacha-hub/releases/tag/v0.1.1" };
+  saveState(valid, path);
+  assert.deepEqual(loadState(path), valid);
+});
+
 test("факты Kuro в состоянии сохраняются и читаются как есть, метки меню остаются", () => {
   const dir = mkdtempSync(join(tmpdir(), "collector-"));
   const path = join(dir, "state.json");
@@ -257,4 +281,17 @@ test("из выложенного файла убираются и баннер�
     videos: [],
   };
   assert.deepEqual(baseFromPublished(hub).banners.map((b) => b.title), ["Wiki"]);
+});
+
+test("из выложенного файла в основу не попадает и версия приложения: она из памяти", () => {
+  const hub: HubData = {
+    version: 2,
+    updatedAt: NOW,
+    games: [],
+    codes: [],
+    banners: [],
+    videos: [],
+    app: { version: "0.1.1", url: "https://github.com/Ertezy/Gacha-hub/releases/tag/v0.1.1" },
+  };
+  assert.equal("app" in baseFromPublished(hub), false);
 });

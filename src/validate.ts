@@ -91,6 +91,11 @@ export function validateHub(hub: HubData, maxBytes = MAX_FILE_BYTES): string[] {
     if (count > VIDEOS_PER_GAME) fail(`videos: у ${key} ${count} роликов, больше ${VIDEOS_PER_GAME}`);
   }
 
+  if (hub.app !== undefined) {
+    if (!(typeof hub.app.version === "string" && /^\d+\.\d+\.\d+$/.test(hub.app.version))) fail("app.version: три числа через точку");
+    if (!(typeof hub.app.url === "string" && hub.app.url.startsWith("https://"))) fail("app.url: https");
+  }
+
   const bytes = Buffer.byteLength(JSON.stringify(hub), "utf8");
   if (bytes > maxBytes) fail(`файл: ${bytes} байт, больше потолка ${maxBytes}`);
 

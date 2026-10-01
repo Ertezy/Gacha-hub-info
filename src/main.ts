@@ -5,6 +5,7 @@ import { createHttp, StatusError } from "./http.ts";
 import { applyIssueActions, createGitHub, planIssues } from "./issues.ts";
 import { mergeHub, sameData, sectionKey } from "./merge.ts";
 import { applyOverrides, bannerStarts, parseOverrides, type Overrides } from "./overrides.ts";
+import { APP_RELEASE, fetchAppRelease } from "./sources/appRelease.ts";
 import { refreshArt, withArt } from "./sources/art.ts";
 import { kuroBanners, unreadableAnnouncement, withKuroBanners } from "./sources/kuro.ts";
 import { KURO_SIGNAL, SOURCES, fetchKuroAnnouncements, kuroFactsFromMemory } from "./sources/registry.ts";
@@ -29,7 +30,7 @@ const dryRun = process.argv.includes("--dry-run");
 const now = Math.floor(Date.now() / 1000);
 const http = createHttp();
 const state = loadState() ?? emptyState();
-const knownIds = new Set<string>([...SOURCES.map((s) => s.id), KURO_SIGNAL.id]);
+const knownIds = new Set<string>([...SOURCES.map((s) => s.id), KURO_SIGNAL.id, APP_RELEASE.id]);
 for (const id of pruneState(state, knownIds)) console.log(`Источника ${id} больше нет — запись о нём убрана.`);
 
 // Живой файл проверяется на каждом прогоне, не только когда состояния нет:
@@ -132,6 +133,14 @@ if (isDue(lastRun[KURO_SIGNAL.id], KURO_SIGNAL.everyHours, now)) {
   }
 }
 
+// Номер последней опубликованной версии приложения — для строки «Вышла версия» в панели.
+if (isDue(lastRun[APP_RELEASE.id], APP_RELEASE.everyHours, now)) {
+  const result = await fetchAppRelease(http, memory, process.env.GITHUB_TOKEN);
+  lastRun[APP_RELEASE.id] = now;
+  if (result.ok) delete state.failures[APP_RELEASE.id];
+  else recordRun(state.failures, APP_RELEASE.id, { kind: "broken", error: result.error }, now);
+}
+
 const hadPrevious = state.base !== null;
 const base = mergeHub({ previous: state.base, catalog, runs, now });
 
@@ -155,7 +164,9 @@ try {
 // вписанный вручную баннер без картинки тоже его получает. Сбой вики прогон не роняет.
 const withOverrides = applyOverrides(withKuro, overrides, now);
 for (const warning of await refreshArt(http, withOverrides.banners, memory.bannerArt, now)) console.log(`арт баннеров: ${warning}`);
-const hub = withArt(withOverrides, memory.bannerArt);
+const withBannerArt = withArt(withOverrides, memory.bannerArt);
+// Версия приложения — из памяти, как баннеры Kuro; в state.base не попадает.
+const hub: HubData = memory.appRelease ? { ...withBannerArt, app: memory.appRelease } : withBannerArt;
 const validationErrors = validateHub(hub);
 validationErrors.push(...missingPrevious(runs, hadPrevious));
 
@@ -183,7 +194,11 @@ if (publish && !dryRun) {
 }
 if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `publish=${publish}\n`);
 
-const labels = Object.fromEntries([...SOURCES.map((s) => [s.id, s.label] as const), [KURO_SIGNAL.id, KURO_SIGNAL.label]]);
+const labels = Object.fromEntries([
+  ...SOURCES.map((s) => [s.id, s.label] as const),
+  [KURO_SIGNAL.id, KURO_SIGNAL.label],
+  [APP_RELEASE.id, APP_RELEASE.label],
+]);
 const repo = process.env.GITHUB_REPOSITORY ?? "Ertezy/Gacha-hub-info";
 const repoUrl = `${process.env.GITHUB_SERVER_URL ?? "https://github.com"}/${repo}`;
 const runUrl = process.env.GITHUB_RUN_ID ? `${repoUrl}/actions/runs/${process.env.GITHUB_RUN_ID}` : repoUrl;
