@@ -4,6 +4,7 @@ import type { Http, Validators } from "../http.ts";
 import { judge } from "../items.ts";
 import { ENDFIELD_WIKI, categoryMembers, expandTemplates, fandom, lastRevisions, pageWikitext, thumbnails, type Wiki } from "../mediawiki.ts";
 import { GAME_IDS, VIDEO_LANGS, type Banner, type GameId, type Item, type Section, type SourceRun, type VideoLang } from "../types.ts";
+import type { ArtMemory } from "./art.ts";
 import { BANNER_PAGES, parseBannerPage, parseEndfieldTable, parseEnneadBanners, recentBannerPages, type BannerDraft, type BannerPageSpec, type PageOutcome } from "./banners.ts";
 import { parseEnneadCodes, parseRowCodes, parseWuwaCodes } from "./codes.ts";
 import {
@@ -39,6 +40,8 @@ export interface SourceMemory {
   kuroFacts: Record<string, KuroBannerFact[]>;
   /** Конец техработ версии, из её патчноута, — по номеру версии. */
   kuroReleases: Record<string, number>;
+  /** Арт прошлого запуска для баннеров без картинки (sources/art.ts). */
+  bannerArt: ArtMemory;
 }
 
 export const emptyMemory = (): SourceMemory => ({
@@ -49,6 +52,7 @@ export const emptyMemory = (): SourceMemory => ({
   kuroPatchNotes: [],
   kuroFacts: {},
   kuroReleases: {},
+  bannerArt: {},
 });
 
 export interface SourceContext {

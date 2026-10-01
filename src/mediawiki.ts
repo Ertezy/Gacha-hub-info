@@ -101,6 +101,24 @@ export async function thumbnails(http: Http, wiki: Wiki, files: string[], width 
   return result;
 }
 
+/** Файл вики и момент его последней загрузки (секунды). */
+export interface WikiFile {
+  name: string;
+  uploadedAt: number;
+}
+
+/** Файлы, имя которых начинается с prefix. Имена — без «File:», с пробелами; порядок — по имени. */
+export async function filesWithPrefix(http: Http, wiki: Wiki, prefix: string, limit = 50): Promise<WikiFile[]> {
+  const json = (await call(http, wiki, {
+    action: "query",
+    list: "allimages",
+    aiprefix: prefix.replace(/ /g, "_"),
+    aiprop: "timestamp",
+    ailimit: String(limit),
+  })) as { query?: { allimages?: { name: string; timestamp: string }[] } };
+  return (json.query?.allimages ?? []).map((f) => ({ name: normalizeTitle(f.name), uploadedAt: Date.parse(f.timestamp) / 1000 }));
+}
+
 export async function expandTemplates(http: Http, wiki: Wiki, text: string): Promise<string> {
   const json = (await call(http, wiki, { action: "expandtemplates", text, prop: "wikitext" })) as {
     expandtemplates?: { wikitext?: string };

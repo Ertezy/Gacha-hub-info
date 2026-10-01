@@ -196,6 +196,30 @@ test("обновление состояния прошлой версии заб
   assert.deepEqual(loadState(path)?.lastRun, lastRun);
 });
 
+test("состояние без памяти об арте получает пустую, остальное не трогается", () => {
+  const dir = mkdtempSync(join(tmpdir(), "collector-"));
+  const path = join(dir, "state.json");
+  const lastRun = { [KURO_SIGNAL.id]: NOW - 60 };
+  const memory = { revisions: {}, pages: {}, validators: { [KURO_MENU_URL]: { etag: '"k1"' } }, kuro: [], kuroFacts: {}, kuroReleases: {}, kuroPatchNotes: [] };
+  writeFileSync(path, JSON.stringify({ version: 1, base: null, published: null, lastPublishedAt: null, lastRun, failures: {}, memory }));
+  const loaded = loadState(path);
+  assert.ok(loaded);
+  assert.deepEqual(loaded.memory.bannerArt, {});
+  assert.deepEqual(loaded.lastRun, lastRun, "сигнал Kuro не перезапускается");
+  assert.deepEqual(loaded.memory.validators, memory.validators, "метки меню остаются");
+});
+
+test("память об арте не того вида — состояние считается отсутствующим, правильная читается как есть", () => {
+  const dir = mkdtempSync(join(tmpdir(), "collector-"));
+  const path = join(dir, "state.json");
+  const valid = emptyState();
+  writeFileSync(path, JSON.stringify({ ...valid, memory: { ...valid.memory, bannerArt: [] } }));
+  assert.equal(loadState(path), null, "bannerArt — список");
+  valid.memory.bannerArt["zzz|Test Banner"] = { image: "https://example.test/a.png", checkedAt: NOW };
+  saveState(valid, path);
+  assert.deepEqual(loadState(path), valid);
+});
+
 test("факты Kuro в состоянии сохраняются и читаются как есть, метки меню остаются", () => {
   const dir = mkdtempSync(join(tmpdir(), "collector-"));
   const path = join(dir, "state.json");

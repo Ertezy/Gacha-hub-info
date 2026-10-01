@@ -5,6 +5,7 @@ import { createHttp, StatusError } from "./http.ts";
 import { applyIssueActions, createGitHub, planIssues } from "./issues.ts";
 import { mergeHub, sameData, sectionKey } from "./merge.ts";
 import { applyOverrides, bannerStarts, parseOverrides, type Overrides } from "./overrides.ts";
+import { refreshArt, withArt } from "./sources/art.ts";
 import { kuroBanners, unreadableAnnouncement, withKuroBanners } from "./sources/kuro.ts";
 import { KURO_SIGNAL, SOURCES, fetchKuroAnnouncements, kuroFactsFromMemory } from "./sources/registry.ts";
 import {
@@ -150,7 +151,11 @@ try {
   overridesErrors = [`не читается как JSON: ${(error as Error).message}`];
 }
 
-const hub = applyOverrides(withKuro, overrides, now);
+// Баннерам без картинки — арт прошлого запуска с фандома (sources/art.ts). После правок:
+// вписанный вручную баннер без картинки тоже его получает. Сбой вики прогон не роняет.
+const withOverrides = applyOverrides(withKuro, overrides, now);
+for (const warning of await refreshArt(http, withOverrides.banners, memory.bannerArt, now)) console.log(`арт баннеров: ${warning}`);
+const hub = withArt(withOverrides, memory.bannerArt);
 const validationErrors = validateHub(hub);
 validationErrors.push(...missingPrevious(runs, hadPrevious));
 

@@ -64,7 +64,8 @@ function looksLikeState(value: unknown): value is State {
     Array.isArray(memory.kuro) &&
     Array.isArray(memory.kuroPatchNotes) &&
     isRecord(memory.kuroFacts) &&
-    isRecord(memory.kuroReleases)
+    isRecord(memory.kuroReleases) &&
+    isRecord(memory.bannerArt)
   );
 }
 
@@ -75,8 +76,12 @@ function looksLikeState(value: unknown): value is State {
  * при 304 берутся из памяти и читались бы и так). Отметка последнего запуска сигнала
  * тоже забывается: первый же запуск после обновления сразу идёт на сайт Kuro, а не
  * ждёт до шести часов, и открытая задача по старому условию закрывается сразу.
+ *
+ * Памяти об арте прошлых запусков (1 октября) у старого файла тоже нет: она пустая и
+ * заполнится на первом же прогоне, остальное при этом не трогается.
  */
 function upgradeState(state: Record<string, unknown>, memory: Record<string, unknown>): void {
+  memory.bannerArt ??= {};
   if (memory.kuroFacts !== undefined && memory.kuroReleases !== undefined && memory.kuroPatchNotes !== undefined) return;
   memory.kuroFacts ??= {};
   memory.kuroReleases ??= {};

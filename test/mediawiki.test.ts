@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Http } from "../src/http.ts";
-import { categoryMembers, expandTemplates, fandom, lastRevisions, pageWikitext, thumbnails } from "../src/mediawiki.ts";
+import { categoryMembers, expandTemplates, fandom, filesWithPrefix, lastRevisions, pageWikitext, thumbnails } from "../src/mediawiki.ts";
 
 function fakeHttp(bodies: Record<string, unknown>) {
   const urls: string[] = [];
@@ -84,6 +84,28 @@ test("миниатюры по именам файлов с подчёркива�
   assert.equal(thumbs.get("False Promise for Tomorrow 2026-08-20.jpg"), "https://static.wikia.nocookie.net/w/a.jpg/revision/latest/scale-to-width-down/400");
   assert.equal(thumbs.has("Missing.png"), false);
   assert.equal(new URL(f.urls[0]!).searchParams.get("iiurlwidth"), "400");
+});
+
+test("файлы по началу имени — с пробелами и временем загрузки", async () => {
+  const f = fakeHttp({
+    allimages: {
+      query: {
+        allimages: [
+          { name: "Test_Banner_2026-05-21.jpg", title: "File:Test Banner 2026-05-21.jpg", timestamp: "2026-05-21T10:00:00Z" },
+          { name: "Test_Banner.png", title: "File:Test Banner.png", timestamp: "2026-01-02T03:04:05Z" },
+        ],
+      },
+    },
+  });
+  assert.deepEqual(await filesWithPrefix(f.http, WUWA, "Test Banner"), [
+    { name: "Test Banner 2026-05-21.jpg", uploadedAt: Date.parse("2026-05-21T10:00:00Z") / 1000 },
+    { name: "Test Banner.png", uploadedAt: Date.parse("2026-01-02T03:04:05Z") / 1000 },
+  ]);
+  const params = new URL(f.urls[0]!).searchParams;
+  assert.equal(params.get("list"), "allimages");
+  assert.equal(params.get("aiprefix"), "Test_Banner");
+  assert.equal(params.get("aiprop"), "timestamp");
+  assert.equal(params.get("ailimit"), "50");
 });
 
 test("раскрытие шаблонов", async () => {
