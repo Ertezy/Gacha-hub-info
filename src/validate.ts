@@ -3,6 +3,7 @@
 
 import { VERSION } from "./sources/appRelease.ts";
 import { CODE_PATTERN } from "./sources/codes.ts";
+import { IMAGE_FILE, VIDEO_FILE } from "./sources/launcherArt.ts";
 import { VIDEOS_PER_GAME } from "./sources/videos.ts";
 import { GAME_IDS, VIDEO_LANGS, type HubData } from "./types.ts";
 
@@ -48,6 +49,12 @@ export function validateHub(hub: HubData, maxBytes = MAX_FILE_BYTES): string[] {
     if (!text(g.title, 1, 100)) fail(`games[${i}].title: 1–100 знаков`);
     if (!(g.redeemUrl === undefined || (typeof g.redeemUrl === "string" && g.redeemUrl.startsWith("https://") && g.redeemUrl.includes("{code}")))) {
       fail(`games[${i}].redeemUrl: https с {code}`);
+    }
+    if (g.background !== undefined) {
+      if (!(typeof g.background.image === "string" && IMAGE_FILE.test(g.background.image))) fail(`games[${i}].background.image: https-картинка webp, png или jpg`);
+      if (!(g.background.video === undefined || (typeof g.background.video === "string" && VIDEO_FILE.test(g.background.video)))) {
+        fail(`games[${i}].background.video: https-видео webm или mp4`);
+      }
     }
   });
   const knownGame = (id: string) => gameIds.has(id);

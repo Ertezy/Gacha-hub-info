@@ -66,7 +66,8 @@ function looksLikeState(value: unknown): value is State {
     isRecord(memory.kuroFacts) &&
     isRecord(memory.kuroReleases) &&
     isRecord(memory.bannerArt) &&
-    (memory.appRelease === null || isRecord(memory.appRelease))
+    (memory.appRelease === null || isRecord(memory.appRelease)) &&
+    isRecord(memory.launcherArt)
   );
 }
 
@@ -81,10 +82,12 @@ function looksLikeState(value: unknown): value is State {
  * Памяти об арте прошлых запусков (1 октября) у старого файла тоже нет: она пустая и
  * заполнится на первом же прогоне, остальное при этом не трогается. То же с памятью о
  * версии приложения (1 октября): null, спросится на первом прогоне.
+ * И с памятью о фонах лаунчера (2 октября): пустая, заполнится на первом прогоне.
  */
 function upgradeState(state: Record<string, unknown>, memory: Record<string, unknown>): void {
   memory.bannerArt ??= {};
   memory.appRelease ??= null;
+  memory.launcherArt ??= {};
   if (memory.kuroFacts !== undefined && memory.kuroReleases !== undefined && memory.kuroPatchNotes !== undefined) return;
   memory.kuroFacts ??= {};
   memory.kuroReleases ??= {};

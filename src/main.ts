@@ -8,6 +8,7 @@ import { applyOverrides, bannerStarts, parseOverrides, type Overrides } from "./
 import { APP_RELEASE, fetchAppRelease } from "./sources/appRelease.ts";
 import { refreshArt, withArt } from "./sources/art.ts";
 import { kuroBanners, unreadableAnnouncement, withKuroBanners } from "./sources/kuro.ts";
+import { LAUNCHER_ART, fetchLauncherArt, withLauncherArt } from "./sources/launcherArt.ts";
 import { KURO_SIGNAL, SOURCES, fetchKuroAnnouncements, kuroFactsFromMemory } from "./sources/registry.ts";
 import {
   PAGES_URL,
@@ -30,7 +31,7 @@ const dryRun = process.argv.includes("--dry-run");
 const now = Math.floor(Date.now() / 1000);
 const http = createHttp();
 const state = loadState() ?? emptyState();
-const knownIds = new Set<string>([...SOURCES.map((s) => s.id), KURO_SIGNAL.id, APP_RELEASE.id]);
+const knownIds = new Set<string>([...SOURCES.map((s) => s.id), KURO_SIGNAL.id, APP_RELEASE.id, LAUNCHER_ART.id]);
 for (const id of pruneState(state, knownIds)) console.log(`Источника ${id} больше нет — запись о нём убрана.`);
 
 // Живой файл проверяется на каждом прогоне, не только когда состояния нет:
@@ -141,6 +142,14 @@ if (isDue(lastRun[APP_RELEASE.id], APP_RELEASE.everyHours, now)) {
   else recordRun(state.failures, APP_RELEASE.id, { kind: "broken", error: result.error }, now);
 }
 
+// Фоны официального лаунчера HoYoPlay — ссылки для фона игр в приложении.
+if (isDue(lastRun[LAUNCHER_ART.id], LAUNCHER_ART.everyHours, now)) {
+  const result = await fetchLauncherArt(http, memory);
+  lastRun[LAUNCHER_ART.id] = now;
+  if (result.ok) delete state.failures[LAUNCHER_ART.id];
+  else recordRun(state.failures, LAUNCHER_ART.id, { kind: "broken", error: result.error }, now);
+}
+
 const hadPrevious = state.base !== null;
 const base = mergeHub({ previous: state.base, catalog, runs, now });
 
@@ -166,7 +175,9 @@ const withOverrides = applyOverrides(withKuro, overrides, now);
 for (const warning of await refreshArt(http, withOverrides.banners, memory.bannerArt, now)) console.log(`арт баннеров: ${warning}`);
 const withBannerArt = withArt(withOverrides, memory.bannerArt);
 // Версия приложения — из памяти, как баннеры Kuro; в state.base не попадает.
-const hub: HubData = memory.appRelease ? { ...withBannerArt, app: memory.appRelease } : withBannerArt;
+const withRelease: HubData = memory.appRelease ? { ...withBannerArt, app: memory.appRelease } : withBannerArt;
+// Фоны лаунчера — из памяти, как версия приложения; в state.base не попадают (игры берутся из каталога).
+const hub: HubData = withLauncherArt(withRelease, memory.launcherArt);
 const validationErrors = validateHub(hub);
 validationErrors.push(...missingPrevious(runs, hadPrevious));
 
@@ -198,6 +209,7 @@ const labels = Object.fromEntries([
   ...SOURCES.map((s) => [s.id, s.label] as const),
   [KURO_SIGNAL.id, KURO_SIGNAL.label],
   [APP_RELEASE.id, APP_RELEASE.label],
+  [LAUNCHER_ART.id, LAUNCHER_ART.label],
 ]);
 const repo = process.env.GITHUB_REPOSITORY ?? "Ertezy/Gacha-hub-info";
 const repoUrl = `${process.env.GITHUB_SERVER_URL ?? "https://github.com"}/${repo}`;

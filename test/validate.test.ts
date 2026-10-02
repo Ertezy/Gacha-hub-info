@@ -98,3 +98,15 @@ test("поле app: необязательное, три числа через �
   assert.ok(errors.some((e) => e.startsWith("app.version")));
   assert.ok(errors.some((e) => e.startsWith("app.url")));
 });
+
+test("фон игры: необязателен, картинка и видео — https нужного вида", () => {
+  const hub = good();
+  hub.games[0]!.background = { image: "https://cdn.example.test/a.webp", video: "https://cdn.example.test/a.webm" };
+  assert.deepEqual(validateHub(hub), []);
+  hub.games[0]!.background = { image: "https://cdn.example.test/a.webp" };
+  assert.deepEqual(validateHub(hub), []);
+  hub.games[0]!.background = { image: "http://cdn.example.test/a.webp", video: "https://cdn.example.test/a.mov" };
+  const errors = validateHub(hub);
+  assert.ok(errors.some((e) => e.startsWith("games[0].background.image")));
+  assert.ok(errors.some((e) => e.startsWith("games[0].background.video")));
+});

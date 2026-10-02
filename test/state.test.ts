@@ -244,6 +244,29 @@ test("версия приложения не того вида — состоя�
   assert.deepEqual(loadState(path), valid);
 });
 
+test("состояние без памяти о фонах лаунчера получает пустую, остальное не трогается", () => {
+  const dir = mkdtempSync(join(tmpdir(), "collector-"));
+  const path = join(dir, "state.json");
+  const lastRun = { [KURO_SIGNAL.id]: NOW - 60 };
+  const memory = { revisions: {}, pages: {}, validators: { [KURO_MENU_URL]: { etag: '"k1"' } }, kuro: [], kuroFacts: {}, kuroReleases: {}, kuroPatchNotes: [], bannerArt: {}, appRelease: null };
+  writeFileSync(path, JSON.stringify({ version: 1, base: null, published: null, lastPublishedAt: null, lastRun, failures: {}, memory }));
+  const loaded = loadState(path);
+  assert.ok(loaded);
+  assert.deepEqual(loaded.memory.launcherArt, {});
+  assert.deepEqual(loaded.lastRun, lastRun, "сигнал Kuro не перезапускается");
+});
+
+test("фоны лаунчера не того вида — состояние считается отсутствующим, правильные читаются как есть", () => {
+  const dir = mkdtempSync(join(tmpdir(), "collector-"));
+  const path = join(dir, "state.json");
+  const valid = emptyState();
+  writeFileSync(path, JSON.stringify({ ...valid, memory: { ...valid.memory, launcherArt: [] } }));
+  assert.equal(loadState(path), null, "launcherArt — список");
+  valid.memory.launcherArt = { zzz: { image: "https://cdn.example.test/z.webp", video: "https://cdn.example.test/z.webm" } };
+  saveState(valid, path);
+  assert.deepEqual(loadState(path), valid);
+});
+
 test("факты Kuro в состоянии сохраняются и читаются как есть, метки меню остаются", () => {
   const dir = mkdtempSync(join(tmpdir(), "collector-"));
   const path = join(dir, "state.json");
