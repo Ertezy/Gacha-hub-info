@@ -3,7 +3,7 @@
 import type { Http, Validators } from "../http.ts";
 import { judge } from "../items.ts";
 import { ENDFIELD_WIKI, categoryMembers, expandTemplates, fandom, lastRevisions, pageWikitext, thumbnails, type Wiki } from "../mediawiki.ts";
-import { GAME_IDS, VIDEO_LANGS, type AppRelease, type Banner, type GameId, type Item, type Section, type SourceRun, type VideoLang } from "../types.ts";
+import { GAME_IDS, VIDEO_LANGS, type AppRelease, type Banner, type GameBackground, type GameId, type Item, type Section, type SourceRun, type VideoLang } from "../types.ts";
 import type { ArtMemory } from "./art.ts";
 import { BANNER_PAGES, parseBannerPage, parseEndfieldTable, parseEnneadBanners, recentBannerPages, type BannerDraft, type BannerPageSpec, type PageOutcome } from "./banners.ts";
 import { parseEnneadCodes, parseRowCodes, parseWuwaCodes } from "./codes.ts";
@@ -44,6 +44,8 @@ export interface SourceMemory {
   bannerArt: ArtMemory;
   /** Последняя опубликованная версия приложения (sources/appRelease.ts); null — релизов нет или ещё не спрашивали. */
   appRelease: AppRelease | null;
+  /** Фоны официального лаунчера HoYoPlay по играм (sources/launcherArt.ts). */
+  launcherArt: Partial<Record<GameId, GameBackground>>;
 }
 
 export const emptyMemory = (): SourceMemory => ({
@@ -56,6 +58,7 @@ export const emptyMemory = (): SourceMemory => ({
   kuroReleases: {},
   bannerArt: {},
   appRelease: null,
+  launcherArt: {},
 });
 
 export interface SourceContext {

@@ -46,11 +46,18 @@ export interface Video {
   premiere: false;
 }
 
+/** Текущий фон официального лаунчера игры: картинка и, если есть, видео. Только ссылки. */
+export interface GameBackground {
+  image: string;
+  video?: string;
+}
+
 export interface HubGame {
   id: GameId;
   title: string;
   redeemUrl?: string;
   match: { steamAppIds: number[]; epicAppNames: string[]; folderNames: string[] };
+  background?: GameBackground;
 }
 
 /** Последняя опубликованная версия приложения: номер без «v» и страница релиза. */
