@@ -91,7 +91,7 @@ test("видео: язык обязателен, лимит шесть на иг
 
 test("поле app: необязательное, три числа через точку и https", () => {
   const hub = good();
-  hub.app = { version: "0.1.1", url: "https://github.com/Ertezy/Gacha-hub/releases/tag/v0.1.1" };
+  hub.app = { version: "0.1.1", url: "https://github.com/Ertezy/Kitsudock/releases/tag/v0.1.1" };
   assert.deepEqual(validateHub(hub), []);
   hub.app = { version: "0.1", url: "http://github.com/x" };
   const errors = validateHub(hub);

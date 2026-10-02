@@ -4,7 +4,7 @@ import { StatusError, type Http, type HttpResponse, type Validators } from "../s
 import { APP_RELEASE_URL, fetchAppRelease, parseAppRelease } from "../src/sources/appRelease.ts";
 import { emptyMemory } from "../src/sources/registry.ts";
 
-const RELEASE = { tag_name: "v0.1.1", html_url: "https://github.com/Ertezy/Gacha-hub/releases/tag/v0.1.1", draft: false, prerelease: false };
+const RELEASE = { tag_name: "v0.1.1", html_url: "https://github.com/Ertezy/Kitsudock/releases/tag/v0.1.1", draft: false, prerelease: false };
 
 test("номер без v и ссылка из ответа GitHub", () => {
   assert.deepEqual(parseAppRelease(RELEASE), { version: "0.1.1", url: RELEASE.html_url });

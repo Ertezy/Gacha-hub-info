@@ -239,7 +239,7 @@ test("версия приложения не того вида — состоя�
   const valid = emptyState();
   writeFileSync(path, JSON.stringify({ ...valid, memory: { ...valid.memory, appRelease: "0.1.1" } }));
   assert.equal(loadState(path), null, "appRelease — строка");
-  valid.memory.appRelease = { version: "0.1.1", url: "https://github.com/Ertezy/Gacha-hub/releases/tag/v0.1.1" };
+  valid.memory.appRelease = { version: "0.1.1", url: "https://github.com/Ertezy/Kitsudock/releases/tag/v0.1.1" };
   saveState(valid, path);
   assert.deepEqual(loadState(path), valid);
 });
@@ -314,7 +314,7 @@ test("из выложенного файла в основу не попадае
     codes: [],
     banners: [],
     videos: [],
-    app: { version: "0.1.1", url: "https://github.com/Ertezy/Gacha-hub/releases/tag/v0.1.1" },
+    app: { version: "0.1.1", url: "https://github.com/Ertezy/Kitsudock/releases/tag/v0.1.1" },
   };
   assert.equal("app" in baseFromPublished(hub), false);
 });

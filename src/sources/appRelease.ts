@@ -8,7 +8,7 @@ import { StatusError, type Http } from "../http.ts";
 import type { AppRelease } from "../types.ts";
 import type { SourceMemory } from "./registry.ts";
 
-export const APP_RELEASE_URL = "https://api.github.com/repos/Ertezy/Gacha-hub/releases/latest";
+export const APP_RELEASE_URL = "https://api.github.com/repos/Ertezy/Kitsudock/releases/latest";
 
 export const APP_RELEASE = { id: "app-release", label: "последняя версия приложения (GitHub Releases)", everyHours: 6 } as const;
 

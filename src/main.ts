@@ -211,7 +211,7 @@ const labels = Object.fromEntries([
   [APP_RELEASE.id, APP_RELEASE.label],
   [LAUNCHER_ART.id, LAUNCHER_ART.label],
 ]);
-const repo = process.env.GITHUB_REPOSITORY ?? "Ertezy/Gacha-hub-info";
+const repo = process.env.GITHUB_REPOSITORY ?? "Ertezy/Kitsudock-data";
 const repoUrl = `${process.env.GITHUB_SERVER_URL ?? "https://github.com"}/${repo}`;
 const runUrl = process.env.GITHUB_RUN_ID ? `${repoUrl}/actions/runs/${process.env.GITHUB_RUN_ID}` : repoUrl;
 

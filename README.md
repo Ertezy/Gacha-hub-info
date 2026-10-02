@@ -1,11 +1,13 @@
-# Gacha Hub Info
+# Kitsudock-data
 
-Данные для панели лаунчера Gacha Hub: промокоды, баннеры персонажей и видео
+Раньше проект назывался Gacha Hub, а этот репозиторий — Gacha-hub-info.
+
+Данные для панели лаунчера Kitsudock: промокоды, баннеры персонажей и видео
 Genshin Impact, Honkai: Star Rail, Zenless Zone Zero, Wuthering Waves и
 Arknights: Endfield.
 
 Файл собирается автоматически раз в час:
-https://ertezy.github.io/Gacha-hub-info/hub.json
+https://ertezy.github.io/Kitsudock-data/hub.json
 
 Не связано с разработчиками игр. Материалы принадлежат правообладателям.
 
@@ -19,7 +21,7 @@ https://ertezy.github.io/Gacha-hub-info/hub.json
 | Баннеры Wuthering Waves, пока фандом их не знает | официальные анонсы Kuro Games | только название, персонаж и сроки, со ссылкой на анонс; ни текста, ни арта (картинка — с фандома, см. ниже) |
 | Запасной источник кодов и баннеров HoYoverse | [hoyoverse-api](https://github.com/torikushiii/hoyoverse-api) (api.ennead.cc) | — |
 | Видео | официальные каналы YouTube — английские и японские | — |
-| Номер последней версии приложения | GitHub Releases API (`Ertezy/Gacha-hub`, только опубликованные релизы) | — |
+| Номер последней версии приложения | GitHub Releases API (`Ertezy/Kitsudock`, только опубликованные релизы) | — |
 | Фоны Genshin, Star Rail и ZZZ для приложения | официальный лаунчер HoYoPlay (`getAllGameBasicInfo`) | только ссылки на текущий фон: картинку и видео |
 
 Новости Wuthering Waves на официальном сайте Kuro Games запрашиваются раз в

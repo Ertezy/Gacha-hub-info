@@ -1,10 +1,10 @@
 {
-  "name": "gacha-hub-info",
+  "name": "kitsudock-data",
   "private": true,
-  "description": "Data collector for Gacha Hub: promo codes, banners and videos in one hub.json",
+  "description": "Data collector for Kitsudock: promo codes, banners, videos and backgrounds in one hub.json",
   "license": "MIT",
   "author": "Ertezy",
-  "repository": { "type": "git", "url": "https://github.com/Ertezy/Gacha-hub-info" },
+  "repository": { "type": "git", "url": "https://github.com/Ertezy/Kitsudock-data" },
   "type": "module",
   "engines": { "node": ">=24.19" },
   "scripts": {

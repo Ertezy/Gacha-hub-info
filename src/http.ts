@@ -1,7 +1,7 @@
 // Все запросы сборщика идут отсюда: одна подпись, таймаут, один повтор,
 // условные заголовки и очередь по хосту, чтобы не нагружать чужие сайты.
 
-export const USER_AGENT = "GachaHubCollector/1.0 (+https://github.com/Ertezy/Gacha-hub-info)";
+export const USER_AGENT = "KitsudockCollector/1.0 (+https://github.com/Ertezy/Kitsudock-data)";
 
 export interface Validators {
   etag?: string;

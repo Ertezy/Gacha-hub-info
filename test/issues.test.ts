@@ -14,8 +14,8 @@ const base = (patch: Partial<IssueInputs> = {}): IssueInputs => ({
   daysSinceHumanCommit: 3,
   open: [],
   now: NOW,
-  runUrl: "https://github.com/Ertezy/Gacha-hub-info/actions/runs/1",
-  repoUrl: "https://github.com/Ertezy/Gacha-hub-info",
+  runUrl: "https://github.com/Ertezy/Kitsudock-data/actions/runs/1",
+  repoUrl: "https://github.com/Ertezy/Kitsudock-data",
   ...patch,
 });
 
@@ -127,10 +127,10 @@ test("клиент GitHub: список, открытие, закрытие", as
     }
     return new Response("{}", { status: 201 });
   }) as typeof fetch;
-  const gh = createGitHub({ token: "t", repo: "Ertezy/Gacha-hub-info", fetch: fakeFetch });
+  const gh = createGitHub({ token: "t", repo: "Ertezy/Kitsudock-data", fetch: fakeFetch });
   assert.deepEqual(await gh.listOpen(), [{ number: 7, key: "source:a" }]);
   await gh.open("Заголовок", "Текст");
-  assert.deepEqual(calls.slice(-2).map((c) => [c.method, c.url.replace("https://api.github.com/repos/Ertezy/Gacha-hub-info", "")]), [
+  assert.deepEqual(calls.slice(-2).map((c) => [c.method, c.url.replace("https://api.github.com/repos/Ertezy/Kitsudock-data", "")]), [
     ["POST", "/labels"],
     ["POST", "/issues"],
   ]);

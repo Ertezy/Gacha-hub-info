@@ -9,7 +9,7 @@ import { KURO_SIGNAL, emptyMemory, type SourceMemory } from "./sources/registry.
 import type { HubData, Item, SourceRun } from "./types.ts";
 
 export const STATE_FILE = ".collector-state/state.json";
-export const PAGES_URL = "https://ertezy.github.io/Gacha-hub-info/hub.json";
+export const PAGES_URL = "https://ertezy.github.io/Kitsudock-data/hub.json";
 
 /** Файл перевыкладывается не реже раза в 6 часов: на его метку времени смотрит правило протухания в приложении. */
 export const REPUBLISH_SECONDS = 6 * 3600;
